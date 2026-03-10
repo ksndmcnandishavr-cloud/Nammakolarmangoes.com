@@ -39,3 +39,11 @@ export interface Offer {
   active: number;
   image_url: string;
 }
+
+export interface Testimonial {
+  id: number;
+  name: string;
+  rating: number;
+  review: string;
+  date: string;
+}

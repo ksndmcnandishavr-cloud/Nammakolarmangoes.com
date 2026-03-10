@@ -71,7 +71,9 @@ export const translations = {
     viewOrderHistory: "View Order History",
     changeBackground: "Change Background",
     harvestNow: "Harvest 2026 Now Available",
-    deliveryTime: "Delivery within Bangalore: 24 to 48 hours"
+    deliveryTime: "Delivery within Bangalore: 24 to 48 hours",
+    testimonialsTitle: "Voices of our Community",
+    testimonialsSubtitle: "Hear from those who have tasted the gold standard of Kolar's harvest."
   },
   kn: {
     heroTitle: "ನಮ್ಮ ಕೋಲಾರ ಮಾವು",
@@ -145,7 +147,9 @@ export const translations = {
     viewOrderHistory: "ಆರ್ಡರ್ ಇತಿಹಾಸ ನೋಡಿ",
     changeBackground: "ಹಿನ್ನೆಲೆ ಬದಲಿಸಿ",
     harvestNow: "2026 ರ ಸುಗ್ಗಿ ಈಗ ಲಭ್ಯವಿದೆ",
-    deliveryTime: "ಬೆಂಗಳೂರಿನಲ್ಲಿ ಡೆಲಿವರಿ ಸಮಯ: 24 ರಿಂದ 48 ಗಂಟೆಗಳು"
+    deliveryTime: "ಬೆಂಗಳೂರಿನಲ್ಲಿ ಡೆಲಿವರಿ ಸಮಯ: 24 ರಿಂದ 48 ಗಂಟೆಗಳು",
+    testimonialsTitle: "ನಮ್ಮ ಗ್ರಾಹಕರ ಮಾತು",
+    testimonialsSubtitle: "ಕೋಲಾರದ ಅತ್ಯುತ್ತಮ ಮಾವಿನ ಹಣ್ಣುಗಳನ್ನು ಸವಿದವರ ಅನುಭವಗಳು."
   }
 };
 

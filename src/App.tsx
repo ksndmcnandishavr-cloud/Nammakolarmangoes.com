@@ -29,9 +29,10 @@ import {
   Loader2,
   Calendar,
   Image as ImageIcon,
-  Upload
+  Upload,
+  Star
 } from 'lucide-react';
-import { Product, CartItem, Order, Offer } from './types';
+import { Product, CartItem, Order, Offer, Testimonial } from './types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -230,6 +231,106 @@ const SkeletonCard = () => (
     </div>
   </Card>
 );
+
+const Testimonials = ({ t, language }: any) => {
+  const testimonials: Testimonial[] = [
+    {
+      id: 1,
+      name: language === 'en' ? "Arjun Rao" : "ಅರ್ಜುನ್ ರಾವ್",
+      rating: 5,
+      review: language === 'en' ? "The best Alphonso mangoes I've ever had. They arrived perfectly ripe and the sweetness is unmatched. Reminds me of my childhood summers in Kolar." : "ನಾನು ತಿಂದ ಅತ್ಯುತ್ತಮ ಆಲ್ಪಾನ್ಸೋ ಮಾವಿನ ಹಣ್ಣುಗಳು. ಅವು ಸರಿಯಾಗಿ ಹಣ್ಣಾಗಿದ್ದವು ಮತ್ತು ಸಿಹಿ ಅದ್ಭುತವಾಗಿದೆ. ಕೋಲಾರದಲ್ಲಿ ಕಳೆದ ನನ್ನ ಬಾಲ್ಯದ ದಿನಗಳನ್ನು ನೆನಪಿಸುತ್ತದೆ.",
+      date: "May 2025"
+    },
+    {
+      id: 2,
+      name: language === 'en' ? "Priya Sharma" : "ಪ್ರಿಯಾ ಶರ್ಮಾ",
+      rating: 5,
+      review: language === 'en' ? "Ordered 10kg for a family gathering. Everyone was asking where I got them from. The packaging was very secure and eco-friendly." : "ಕುಟುಂಬದ ಸಮಾರಂಭಕ್ಕಾಗಿ 10 ಕೆಜಿ ಆರ್ಡರ್ ಮಾಡಿದ್ದೆ. ಎಲ್ಲರೂ ಇವುಗಳನ್ನು ಎಲ್ಲಿಂದ ತಂದೆ ಎಂದು ಕೇಳುತ್ತಿದ್ದರು. ಪ್ಯಾಕೇಜಿಂಗ್ ತುಂಬಾ ಸುರಕ್ಷಿತವಾಗಿತ್ತು.",
+      date: "June 2025"
+    },
+    {
+      id: 3,
+      name: language === 'en' ? "Suresh Kumar" : "ಸುರೇಶ್ ಕುಮಾರ್",
+      rating: 4,
+      review: language === 'en' ? "Authentic taste. You can really tell the difference between these organic mangoes and the ones from the local market. Will definitely order again." : "ಅಪ್ಪಟ ರುಚಿ. ಈ ಸಾವಯವ ಮಾವಿನ ಹಣ್ಣುಗಳು ಮತ್ತು ಸ್ಥಳೀಯ ಮಾರುಕಟ್ಟೆಯ ಹಣ್ಣುಗಳ ನಡುವಿನ ವ್ಯತ್ಯಾಸವನ್ನು ನೀವು ಸುಲಭವಾಗಿ ಗುರುತಿಸಬಹುದು.",
+      date: "May 2025"
+    }
+  ];
+
+  return (
+    <section className="py-32 bg-stone-50 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-6">
+        <div className="text-center mb-24">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="flex items-center justify-center gap-4 mb-6"
+          >
+            <div className="h-px w-12 bg-brand-olive/20" />
+            <span className="text-brand-olive text-[10px] font-sans font-bold uppercase tracking-[0.4em]">
+              {t.testimonialsTitle}
+            </span>
+            <div className="h-px w-12 bg-brand-olive/20" />
+          </motion.div>
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1 }}
+            className="text-5xl md:text-7xl font-serif italic text-brand-olive mb-8"
+          >
+            {t.testimonialsSubtitle}
+          </motion.h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+          {testimonials.map((testimonial, idx) => (
+            <motion.div
+              key={testimonial.id}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: idx * 0.1 }}
+            >
+              <Card className="h-full flex flex-col justify-between hover:translate-y-[-8px] transition-all duration-500 border border-stone-100">
+                <div className="space-y-6">
+                  <div className="flex gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={cn(
+                          "w-4 h-4",
+                          i < testimonial.rating ? "fill-brand-mango text-brand-mango" : "text-stone-200"
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xl font-serif italic text-stone-600 leading-relaxed">
+                    "{testimonial.review}"
+                  </p>
+                </div>
+                <div className="mt-10 pt-8 border-t border-stone-100 flex justify-between items-center">
+                  <div>
+                    <p className="font-sans font-bold text-xs uppercase tracking-widest text-brand-olive">
+                      {testimonial.name}
+                    </p>
+                    <p className="text-[10px] font-sans uppercase tracking-widest text-stone-400 mt-1">
+                      {testimonial.date}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-brand-mango/10 flex items-center justify-center">
+                    <CheckCircle2 className="w-5 h-5 text-brand-mango" />
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
 
 const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartCount, onOpenAuth, onOpenHistory, onOpenBooking, heroBg, onHeroBgChange, isLoading, t, language, onLanguageChange }: any) => {
   return (
@@ -516,6 +617,8 @@ const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartC
           </div>
         </div>
       </section>
+
+      <Testimonials t={t} language={language} />
 
       {/* Footer */}
       <footer className="bg-brand-olive text-white pt-32 pb-48 md:pb-32">
