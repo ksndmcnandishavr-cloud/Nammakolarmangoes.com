@@ -767,7 +767,7 @@ const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartC
                 className="relative"
               >
                 <img 
-                  src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=1200" 
+                  src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&q=80&w=1200" 
                   className="rounded-[40px] warm-shadow w-full aspect-[4/3] object-cover"
                   alt="Our Farm in Srinivasapura"
                   referrerPolicy="no-referrer"

@@ -1,6 +1,22 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import Database from "better-sqlite3";
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  collection, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  query, 
+  where, 
+  orderBy, 
+  setDoc,
+  getDoc,
+  deleteDoc,
+  Timestamp,
+  limit
+} from "firebase/firestore";
 import Stripe from "stripe";
 import Razorpay from "razorpay";
 import path from "path";
@@ -9,83 +25,53 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("mangoes.db");
+const firebaseConfig = {
+  apiKey: "AIzaSyDqZmwd4kevY9adJgoFxdjz3wuPZvivLM4",
+  authDomain: "namma-kolar-mangoes.firebaseapp.com",
+  projectId: "namma-kolar-mangoes",
+  storageBucket: "namma-kolar-mangoes.firebasestorage.app",
+  messagingSenderId: "502912484733",
+  appId: "1:502912484733:web:4f8902048a0ae187faf814",
+  measurementId: "G-V8NTMEBNTX"
+};
 
-// Initialize Database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    variety TEXT NOT NULL,
-    description TEXT,
-    price REAL NOT NULL,
-    stock INTEGER NOT NULL,
-    available INTEGER DEFAULT 1,
-    image_url TEXT
-  );
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
-  CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_name TEXT NOT NULL,
-    customer_email TEXT NOT NULL,
-    address TEXT NOT NULL,
-    phone TEXT NOT NULL,
-    total REAL NOT NULL,
-    delivery_charge REAL DEFAULT 0,
-    promo_code TEXT,
-    payment_id TEXT,
-    payment_status TEXT DEFAULT 'pending',
-    payment_method TEXT,
-    paid_amount REAL DEFAULT 0,
-    status TEXT DEFAULT 'pending',
-    tracking_id TEXT,
-    estimated_delivery TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+// Seed initial data helper
+async function seedData() {
+  const productsCol = collection(db, "products");
+  const productSnapshot = await getDocs(query(productsCol, limit(1)));
+  
+  if (productSnapshot.empty) {
+    const products = [
+      { name: "Premium Alphonso", variety: "Alphonso", description: "The king of mangoes, known for its rich, creamy texture and sweet aroma.", price: 1200, stock: 50, image_url: "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800", available: 1 },
+      { name: "Sweet Badami", variety: "Badami", description: "Often called the Karnataka Alphonso, it's incredibly sweet and pulpy.", price: 800, stock: 100, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800", available: 1 },
+      { name: "Kesar Delight", variety: "Kesar", description: "Famous for its bright orange pulp and intense fragrance.", price: 950, stock: 75, image_url: "https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&q=80&w=800", available: 1 }
+    ];
+    for (const p of products) {
+      await addDoc(productsCol, p);
+    }
+  }
 
-  CREATE TABLE IF NOT EXISTS order_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_id INTEGER,
-    product_id INTEGER,
-    quantity INTEGER,
-    price REAL,
-    FOREIGN KEY(order_id) REFERENCES orders(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS offers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    description TEXT,
-    code TEXT,
-    discount_percent REAL,
-    active INTEGER DEFAULT 1,
-    image_url TEXT
-  );
-`);
-
-// Seed initial data if empty
-const productCount = db.prepare("SELECT count(*) as count FROM products").get() as { count: number };
-if (productCount.count === 0) {
-  const insert = db.prepare("INSERT INTO products (name, variety, description, price, stock, image_url) VALUES (?, ?, ?, ?, ?, ?)");
-  insert.run("Premium Alphonso", "Alphonso", "The king of mangoes, known for its rich, creamy texture and sweet aroma.", 1200, 50, "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800");
-  insert.run("Sweet Badami", "Badami", "Often called the Karnataka Alphonso, it's incredibly sweet and pulpy.", 800, 100, "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800");
-  insert.run("Kesar Delight", "Kesar", "Famous for its bright orange pulp and intense fragrance.", 950, 75, "https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&q=80&w=800");
-}
-
-const offerCount = db.prepare("SELECT count(*) as count FROM offers").get() as { count: number };
-if (offerCount.count === 0) {
-  const insert = db.prepare("INSERT INTO offers (title, description, code, discount_percent, image_url) VALUES (?, ?, ?, ?, ?)");
-  insert.run("Early Bird Special", "Get 10% off on your first order of the season!", "SEASON10", 10, "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800");
-  insert.run("Bulk Order Discount", "Order above 20kg and get 15% off automatically.", "BULK15", 15, "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800");
+  const offersCol = collection(db, "offers");
+  const offerSnapshot = await getDocs(query(offersCol, limit(1)));
+  if (offerSnapshot.empty) {
+    const offers = [
+      { title: "Early Bird Special", description: "Get 10% off on your first order of the season!", code: "SEASON10", discount_percent: 10, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800", active: 1 },
+      { title: "Bulk Order Discount", description: "Order above 20kg and get 15% off automatically.", code: "BULK15", discount_percent: 15, image_url: "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800", active: 1 }
+    ];
+    for (const o of offers) {
+      await addDoc(offersCol, o);
+    }
+  }
 }
 
 async function startServer() {
   const app = express();
   app.use(express.json());
 
-  // Ensure new columns exist
-  try { db.exec("ALTER TABLE orders ADD COLUMN tracking_id TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE orders ADD COLUMN estimated_delivery TEXT"); } catch (e) {}
+  await seedData();
 
   const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
   const razorpay = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET ? new Razorpay({
@@ -94,117 +80,161 @@ async function startServer() {
   }) : null;
 
   // API Routes
-  app.get("/api/products", (req, res) => {
-    const products = db.prepare("SELECT * FROM products").all();
-    res.json(products);
-  });
-
-  app.post("/api/products", (req, res) => {
-    const { name, variety, description, price, stock, image_url } = req.body;
-    const info = db.prepare("INSERT INTO products (name, variety, description, price, stock, image_url) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(name, variety, description, price, stock, image_url);
-    res.json({ id: info.lastInsertRowid });
-  });
-
-  app.put("/api/products/:id", (req, res) => {
-    const { name, variety, description, price, stock, available } = req.body;
-    db.prepare("UPDATE products SET name = ?, variety = ?, description = ?, price = ?, stock = ?, available = ? WHERE id = ?")
-      .run(name, variety, description, price, stock, available ? 1 : 0, req.params.id);
-    res.json({ success: true });
-  });
-
-  app.get("/api/offers", (req, res) => {
-    const offers = db.prepare("SELECT * FROM offers").all();
-    res.json(offers);
-  });
-
-  app.post("/api/offers", (req, res) => {
-    const { title, description, code, discount_percent, image_url } = req.body;
-    const info = db.prepare("INSERT INTO offers (title, description, code, discount_percent, image_url) VALUES (?, ?, ?, ?, ?)")
-      .run(title, description, code, discount_percent, image_url);
-    res.json({ id: info.lastInsertRowid });
-  });
-
-  app.put("/api/offers/:id", (req, res) => {
-    const { title, description, code, discount_percent, active } = req.body;
-    db.prepare("UPDATE offers SET title = ?, description = ?, code = ?, discount_percent = ?, active = ? WHERE id = ?")
-      .run(title, description, code, discount_percent, active ? 1 : 0, req.params.id);
-    res.json({ success: true });
-  });
-
-  app.delete("/api/offers/:id", (req, res) => {
-    db.prepare("DELETE FROM offers WHERE id = ?").run(req.params.id);
-    res.json({ success: true });
-  });
-
-  app.get("/api/orders", (req, res) => {
-    const orders = db.prepare(`
-      SELECT o.*, GROUP_CONCAT(p.name || ' (' || oi.quantity || 'x' || oi.price || ')') as items
-      FROM orders o
-      JOIN order_items oi ON o.id = oi.order_id
-      JOIN products p ON oi.product_id = p.id
-      GROUP BY o.id
-      ORDER BY o.created_at DESC
-    `).all();
-    res.json(orders);
-  });
-
-  app.put("/api/orders/:id", (req, res) => {
-    const { status, tracking_id, estimated_delivery } = req.body;
-    db.prepare("UPDATE orders SET status = ?, tracking_id = ?, estimated_delivery = ? WHERE id = ?")
-      .run(status, tracking_id, estimated_delivery, req.params.id);
-    res.json({ success: true });
-  });
-
-  app.get("/api/orders/history", (req, res) => {
-    const { email, phone } = req.query;
-    if (!email && !phone) {
-      return res.status(400).json({ error: "Email or phone required" });
+  app.get("/api/products", async (req, res) => {
+    try {
+      const productsCol = collection(db, "products");
+      const snapshot = await getDocs(productsCol);
+      const products = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+      res.json(products);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch products" });
     }
-    const orders = db.prepare(`
-      SELECT o.*, GROUP_CONCAT(p.name || ' (' || oi.quantity || 'x' || oi.price || ')') as items
-      FROM orders o
-      JOIN order_items oi ON o.id = oi.order_id
-      JOIN products p ON oi.product_id = p.id
-      WHERE o.customer_email = ? OR o.phone = ?
-      GROUP BY o.id
-      ORDER BY o.created_at DESC
-    `).all(email, phone);
-    res.json(orders);
   });
 
-  app.post("/api/orders", (req, res) => {
-    const { 
-      customer_name, 
-      customer_email, 
-      address, 
-      phone, 
-      items, 
-      total, 
-      delivery_charge, 
-      promo_code,
-      payment_id,
-      payment_status,
-      payment_method,
-      paid_amount
-    } = req.body;
-    
-    const transaction = db.transaction(() => {
-      const info = db.prepare(`
-        INSERT INTO orders (
-          customer_name, 
-          customer_email, 
-          address, 
-          phone, 
-          total, 
-          delivery_charge, 
-          promo_code,
-          payment_id,
-          payment_status,
-          payment_method,
-          paid_amount
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+  app.post("/api/products", async (req, res) => {
+    try {
+      const { name, variety, description, price, stock, image_url } = req.body;
+      const docRef = await addDoc(collection(db, "products"), {
+        name, variety, description, price, stock, image_url, available: 1
+      });
+      res.json({ id: docRef.id });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to create product" });
+    }
+  });
+
+  app.put("/api/products/:id", async (req, res) => {
+    try {
+      const { name, variety, description, price, stock, available } = req.body;
+      const productRef = doc(db, "products", req.params.id);
+      await updateDoc(productRef, {
+        name, variety, description, price, stock, available: available ? 1 : 0
+      });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update product" });
+    }
+  });
+
+  app.get("/api/offers", async (req, res) => {
+    try {
+      const offersCol = collection(db, "offers");
+      const snapshot = await getDocs(offersCol);
+      const offers = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+      res.json(offers);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch offers" });
+    }
+  });
+
+  app.post("/api/offers", async (req, res) => {
+    try {
+      const { title, description, code, discount_percent, image_url } = req.body;
+      const docRef = await addDoc(collection(db, "offers"), {
+        title, description, code, discount_percent, image_url, active: 1
+      });
+      res.json({ id: docRef.id });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to create offer" });
+    }
+  });
+
+  app.put("/api/offers/:id", async (req, res) => {
+    try {
+      const { title, description, code, discount_percent, active } = req.body;
+      const offerRef = doc(db, "offers", req.params.id);
+      await updateDoc(offerRef, {
+        title, description, code, discount_percent, active: active ? 1 : 0
+      });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update offer" });
+    }
+  });
+
+  app.delete("/api/offers/:id", async (req, res) => {
+    try {
+      await deleteDoc(doc(db, "offers", req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to delete offer" });
+    }
+  });
+
+  app.get("/api/orders", async (req, res) => {
+    try {
+      const ordersCol = collection(db, "orders");
+      const snapshot = await getDocs(ordersCol);
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })) as any[];
+      // Sort in memory to avoid index requirement
+      orders.sort((a, b) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0));
+      res.json(orders);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch orders" });
+    }
+  });
+
+  app.put("/api/orders/:id", async (req, res) => {
+    try {
+      const { status, tracking_id, estimated_delivery } = req.body;
+      const orderRef = doc(db, "orders", req.params.id);
+      await updateDoc(orderRef, {
+        status, tracking_id, estimated_delivery
+      });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update order" });
+    }
+  });
+
+  app.get("/api/orders/history", async (req, res) => {
+    try {
+      const { email, phone } = req.query;
+      if (!email && !phone) {
+        return res.status(400).json({ error: "Email or phone required" });
+      }
+      
+      const ordersCol = collection(db, "orders");
+      let q;
+      if (email) {
+        q = query(ordersCol, where("customer_email", "==", email));
+      } else {
+        q = query(ordersCol, where("phone", "==", phone));
+      }
+      
+      const snapshot = await getDocs(q);
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })) as any[];
+      // Sort in memory to avoid index requirement
+      orders.sort((a, b) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0));
+      res.json(orders);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch order history" });
+    }
+  });
+
+  app.post("/api/orders", async (req, res) => {
+    try {
+      const { 
+        customer_name, 
+        customer_email, 
+        address, 
+        phone, 
+        items, 
+        total, 
+        delivery_charge, 
+        promo_code,
+        payment_id,
+        payment_status,
+        payment_method,
+        paid_amount
+      } = req.body;
+      
+      // In Firestore we don't have built-in transactions like SQLite for simple cases easily without more boilerplate
+      // But we can just add the doc and update stocks
+      
+      const orderData = {
         customer_name, 
         customer_email, 
         address, 
@@ -215,22 +245,29 @@ async function startServer() {
         payment_id,
         payment_status,
         payment_method,
-        paid_amount
-      );
-      const orderId = info.lastInsertRowid;
+        paid_amount,
+        status: 'pending',
+        items, // Store items directly in the order doc for Firestore
+        created_at: Timestamp.now()
+      };
 
-      const insertItem = db.prepare("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)");
-      const updateStock = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
-
+      const docRef = await addDoc(collection(db, "orders"), orderData);
+      
+      // Update stocks
       for (const item of items) {
-        insertItem.run(orderId, item.id, item.quantity, item.price);
-        updateStock.run(item.quantity, item.id);
+        const productRef = doc(db, "products", item.id);
+        const productSnap = await getDoc(productRef);
+        if (productSnap.exists()) {
+          const currentStock = productSnap.data().stock || 0;
+          await updateDoc(productRef, { stock: currentStock - item.quantity });
+        }
       }
-      return orderId;
-    });
 
-    const orderId = transaction();
-    res.json({ id: orderId });
+      res.json({ id: docRef.id });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to create order" });
+    }
   });
 
   app.post("/api/create-razorpay-order", async (req, res) => {
@@ -297,18 +334,19 @@ async function startServer() {
     }
   });
 
-  app.get("/api/buyer/history", (req, res) => {
-    const { email } = req.query;
-    const orders = db.prepare(`
-      SELECT o.*, GROUP_CONCAT(p.name || ' (x' || oi.quantity || ')') as items
-      FROM orders o
-      JOIN order_items oi ON o.id = oi.order_id
-      JOIN products p ON oi.product_id = p.id
-      WHERE o.customer_email = ?
-      GROUP BY o.id
-      ORDER BY o.created_at DESC
-    `).all(email);
-    res.json(orders);
+  app.get("/api/buyer/history", async (req, res) => {
+    try {
+      const { email } = req.query;
+      const ordersCol = collection(db, "orders");
+      const q = query(ordersCol, where("customer_email", "==", email));
+      const snapshot = await getDocs(q);
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })) as any[];
+      // Sort in memory to avoid index requirement
+      orders.sort((a, b) => (b.created_at?.seconds || 0) - (a.created_at?.seconds || 0));
+      res.json(orders);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch buyer history" });
+    }
   });
 
   // Vite middleware for development
