@@ -652,9 +652,9 @@ const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartC
             <div className="space-y-8">
               <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-mango">{t.contactUs}</p>
               <ul className="space-y-4 font-serif italic text-lg text-white/60">
-                <li>{language === 'en' ? 'Srinivasapura, Kolar, Karnataka' : 'ಶ್ರೀನಿವಾಸಪುರ, ಕೋಲಾರ, ಕರ್ನಾಟಕ'}</li>
-                <li>+91 98765 43210</li>
-                <li>hello@mangoworld.com</li>
+                <li className="text-white font-bold not-italic">{language === 'en' ? 'Ramakrishnareddy V N' : 'ರಾಮಕೃಷ್ಣರೆಡ್ಡಿ ವಿ ಎನ್'}</li>
+                <li>{language === 'en' ? 'Varathanhalli, Srinivasapura, Kolar, Karnataka-563135' : 'ವರತನಹಳ್ಳಿ, ಶ್ರೀನಿವಾಸಪುರ, ಕೋಲಾರ, ಕರ್ನಾಟಕ-563135'}</li>
+                <li>+91 97430 25459</li>
               </ul>
             </div>
           </div>
@@ -768,7 +768,7 @@ const OrderHistory = ({ onBack, initialEmail, t, language }: any) => {
               value={phone}
               onChange={e => setPhone(e.target.value)}
               className="w-full bg-stone-50 border-2 border-stone-50 rounded-[24px] px-8 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
-              placeholder="+91 98765 43210"
+              placeholder="+91 97430 25459"
             />
           </div>
         </div>
@@ -1293,7 +1293,7 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
                     value={formData.phone}
                     onChange={e => setFormData({...formData, phone: e.target.value})}
                     className="w-full bg-white border-2 border-stone-100 rounded-[24px] px-8 py-5 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
-                    placeholder="+91 98765 43210"
+                    placeholder="+91 97430 25459"
                   />
                 </div>
                 <div className="space-y-3">
