@@ -73,7 +73,11 @@ export const translations = {
     harvestNow: "Harvest 2026 Now Available",
     deliveryTime: "Delivery within Bangalore: 24 to 48 hours",
     testimonialsTitle: "Voices of our Community",
-    testimonialsSubtitle: "Hear from those who have tasted the gold standard of Kolar's harvest."
+    testimonialsSubtitle: "Hear from those who have tasted the gold standard of Kolar's harvest.",
+    chatTitle: "Farm Assistant",
+    chatSubtitle: "Ask me anything about our mangoes!",
+    chatPlaceholder: "Type your message...",
+    chatWelcome: "Namaste! I'm your farm assistant. How can I help you today?",
   },
   kn: {
     heroTitle: "ನಮ್ಮ ಕೋಲಾರ ಮಾವು",
@@ -149,7 +153,11 @@ export const translations = {
     harvestNow: "2026 ರ ಸುಗ್ಗಿ ಈಗ ಲಭ್ಯವಿದೆ",
     deliveryTime: "ಬೆಂಗಳೂರಿನಲ್ಲಿ ಡೆಲಿವರಿ ಸಮಯ: 24 ರಿಂದ 48 ಗಂಟೆಗಳು",
     testimonialsTitle: "ನಮ್ಮ ಗ್ರಾಹಕರ ಮಾತು",
-    testimonialsSubtitle: "ಕೋಲಾರದ ಅತ್ಯುತ್ತಮ ಮಾವಿನ ಹಣ್ಣುಗಳನ್ನು ಸವಿದವರ ಅನುಭವಗಳು."
+    testimonialsSubtitle: "ಕೋಲಾರದ ಅತ್ಯುತ್ತಮ ಮಾವಿನ ಹಣ್ಣುಗಳನ್ನು ಸವಿದವರ ಅನುಭವಗಳು.",
+    chatTitle: "ತೋಟದ ಸಹಾಯಕ",
+    chatSubtitle: "ನಮ್ಮ ಮಾವಿನ ಹಣ್ಣುಗಳ ಬಗ್ಗೆ ಏನನ್ನಾದರೂ ಕೇಳಿ!",
+    chatPlaceholder: "ನಿಮ್ಮ ಸಂದೇಶವನ್ನು ಟೈಪ್ ಮಾಡಿ...",
+    chatWelcome: "ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ತೋಟದ ಸಹಾಯಕ. ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
   }
 };
 

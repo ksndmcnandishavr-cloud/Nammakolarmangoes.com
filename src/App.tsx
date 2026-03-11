@@ -1,6 +1,7 @@
-import { useState, useEffect, ChangeEvent, useMemo } from 'react';
+import { useState, useEffect, ChangeEvent, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, Language } from './translations';
+import { GoogleGenAI } from "@google/genai";
 import { 
   ShoppingBasket, 
   User, 
@@ -43,6 +44,157 @@ function cn(...inputs: ClassValue[]) {
 }
 
 // --- Components ---
+
+// --- Components ---
+
+const HelpChat = ({ t, language }: { t: any, language: Language }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const userMessage = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
+    setIsLoading(true);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          { role: 'user', parts: [{ text: `You are a helpful farm assistant for "Namma Kolar Mangoes", a mango farm in Srinivasapura, Kolar. 
+            The farm is owned by Ramakrishnareddy V N. 
+            Location: Varatanahalli, Srinivasapura, Kolar, Karnataka-563135.
+            Coordinates: 13.315970, 78.153239.
+            Phone: +91 97430 25459 / 91645 02728.
+            We sell varieties like Raspuri, Badami (Alphonso), Mallika, Kesar, and Totapuri.
+            Delivery is available in Bangalore within 24-48 hours.
+            Free delivery for orders above 15kg.
+            Answer in ${language === 'en' ? 'English' : 'Kannada'}.
+            Be polite, warm, and helpful.
+            User asked: ${userMessage}` }] }
+        ],
+      });
+
+      const aiText = response.text || (language === 'en' ? "I'm sorry, I couldn't process that." : "ಕ್ಷಮಿಸಿ, ನನಗೆ ಅದನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.");
+      setMessages(prev => [...prev, { role: 'model', text: aiText }]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      setMessages(prev => [...prev, { role: 'model', text: language === 'en' ? "Connection error. Please try again." : "ಸಂಪರ್ಕ ದೋಷ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ." }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed bottom-8 right-8 z-[100] flex flex-col items-end">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="mb-4 w-[350px] md:w-[400px] h-[500px] bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col border border-stone-100"
+          >
+            {/* Header */}
+            <div className="bg-brand-olive p-6 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-serif italic text-xl">{t.chatTitle}</h3>
+                <p className="text-[10px] uppercase tracking-widest opacity-70">{t.chatSubtitle}</p>
+              </div>
+              <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-stone-50/50">
+              <div className="flex gap-3">
+                <div className="w-8 h-8 rounded-full bg-brand-mango/20 flex items-center justify-center flex-shrink-0">
+                  <MessageCircle size={16} className="text-brand-mango" />
+                </div>
+                <div className="bg-white p-4 rounded-[20px] rounded-tl-none shadow-sm text-sm text-stone-700 leading-relaxed">
+                  {t.chatWelcome}
+                </div>
+              </div>
+
+              {messages.map((msg, i) => (
+                <div key={i} className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "")}>
+                  <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+                    msg.role === 'user' ? "bg-brand-olive/10" : "bg-brand-mango/20"
+                  )}>
+                    {msg.role === 'user' ? <User size={16} className="text-brand-olive" /> : <MessageCircle size={16} className="text-brand-mango" />}
+                  </div>
+                  <div className={cn(
+                    "p-4 rounded-[20px] shadow-sm text-sm leading-relaxed max-w-[80%]",
+                    msg.role === 'user' 
+                      ? "bg-brand-olive text-white rounded-tr-none" 
+                      : "bg-white text-stone-700 rounded-tl-none"
+                  )}>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {isLoading && (
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-brand-mango/20 flex items-center justify-center flex-shrink-0 animate-pulse">
+                    <MessageCircle size={16} className="text-brand-mango" />
+                  </div>
+                  <div className="bg-white p-4 rounded-[20px] rounded-tl-none shadow-sm text-sm text-stone-400">
+                    <Loader2 size={16} className="animate-spin" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="p-4 bg-white border-t border-stone-100 flex gap-2">
+              <input
+                type="text"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                placeholder={t.chatPlaceholder}
+                className="flex-1 bg-stone-50 border-none rounded-full px-6 py-3 text-sm focus:ring-2 focus:ring-brand-mango/20 outline-none"
+              />
+              <button 
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading}
+                className="w-12 h-12 rounded-full bg-brand-mango text-stone-900 flex items-center justify-center hover:bg-brand-mango-dark transition-colors disabled:opacity-50"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500",
+          isOpen ? "bg-stone-900 text-white rotate-90" : "bg-brand-mango text-stone-900"
+        )}
+      >
+        {isOpen ? <X size={28} /> : <MessageCircle size={28} />}
+      </motion.button>
+    </div>
+  );
+};
 
 const Button = ({ className, variant = 'primary', ...props }: any) => {
   const variants = {
@@ -236,7 +388,7 @@ const Testimonials = ({ t, language }: any) => {
   const testimonials: Testimonial[] = [
     {
       id: 1,
-      name: language === 'en' ? "Arjun Rao" : "ಅರ್ಜುನ್ ರಾವ್",
+      name: language === 'en' ? "Amrutesh oli" : "ಅಮೃತೇಶ್ ಓಲಿ",
       rating: 5,
       review: language === 'en' ? "The best Alphonso mangoes I've ever had. They arrived perfectly ripe and the sweetness is unmatched. Reminds me of my childhood summers in Kolar." : "ನಾನು ತಿಂದ ಅತ್ಯುತ್ತಮ ಆಲ್ಪಾನ್ಸೋ ಮಾವಿನ ಹಣ್ಣುಗಳು. ಅವು ಸರಿಯಾಗಿ ಹಣ್ಣಾಗಿದ್ದವು ಮತ್ತು ಸಿಹಿ ಅದ್ಭುತವಾಗಿದೆ. ಕೋಲಾರದಲ್ಲಿ ಕಳೆದ ನನ್ನ ಬಾಲ್ಯದ ದಿನಗಳನ್ನು ನೆನಪಿಸುತ್ತದೆ.",
       date: "May 2025"
@@ -593,7 +745,7 @@ const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartC
                 <Button 
                   variant="mango" 
                   className="w-full sm:w-fit px-12 py-5"
-                  onClick={() => window.open('https://www.google.com/maps/search/Srinivasapura+Kolar+Mango+Orchards', '_blank')}
+                  onClick={() => window.open('https://www.google.com/maps/search/?api=1&query=13.315970,78.153239', '_blank')}
                 >
                   {t.getDirections}
                 </Button>
@@ -607,12 +759,38 @@ const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartC
               </div>
             </div>
             <div className="md:w-1/2 relative">
-              <img 
-                src="https://images.unsplash.com/photo-1601039676561-0157589a3ce3?auto=format&fit=crop&q=80&w=1200" 
-                className="rounded-[40px] warm-shadow w-full aspect-video object-cover"
-                alt="Our Farm in Srinivasapura"
-                referrerPolicy="no-referrer"
-              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 1, ease: [0.21, 0.45, 0.32, 0.9] }}
+                className="relative"
+              >
+                <img 
+                  src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=1200" 
+                  className="rounded-[40px] warm-shadow w-full aspect-[4/3] object-cover"
+                  alt="Our Farm in Srinivasapura"
+                  referrerPolicy="no-referrer"
+                />
+                
+                {/* Decorative Leaf */}
+                <motion.div 
+                  animate={{ rotate: [0, 10, 0] }}
+                  transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }}
+                  className="absolute -bottom-10 -right-10 w-32 h-32 text-brand-olive/10 pointer-events-none"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z" />
+                  </svg>
+                </motion.div>
+
+                {/* Caption */}
+                <div className="absolute -bottom-10 left-0 right-0 text-center">
+                  <p className="text-[10px] font-sans font-bold uppercase tracking-[0.4em] text-stone-400">
+                    {language === 'en' ? 'Our Farm in Srinivasapura' : 'ಶ್ರೀನಿವಾಸಪುರದಲ್ಲಿರುವ ನಮ್ಮ ತೋಟ'}
+                  </p>
+                </div>
+              </motion.div>
             </div>
           </div>
         </div>
@@ -653,8 +831,8 @@ const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartC
               <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-mango">{t.contactUs}</p>
               <ul className="space-y-4 font-serif italic text-lg text-white/60">
                 <li className="text-white font-bold not-italic">{language === 'en' ? 'Ramakrishnareddy V N' : 'ರಾಮಕೃಷ್ಣರೆಡ್ಡಿ ವಿ ಎನ್'}</li>
-                <li>{language === 'en' ? 'Varathanhalli, Srinivasapura, Kolar, Karnataka-563135' : 'ವರತನಹಳ್ಳಿ, ಶ್ರೀನಿವಾಸಪುರ, ಕೋಲಾರ, ಕರ್ನಾಟಕ-563135'}</li>
-                <li>+91 97430 25459</li>
+                <li>{language === 'en' ? 'Varatanahalli, Srinivasapura, Kolar, Karnataka-563135' : 'ವರತನಹಳ್ಳಿ, ಶ್ರೀನಿವಾಸಪುರ, ಕೋಲಾರ, ಕರ್ನಾಟಕ-563135'}</li>
+                <li>+91 97430 25459 / 91645 02728</li>
               </ul>
             </div>
           </div>
@@ -768,7 +946,7 @@ const OrderHistory = ({ onBack, initialEmail, t, language }: any) => {
               value={phone}
               onChange={e => setPhone(e.target.value)}
               className="w-full bg-stone-50 border-2 border-stone-50 rounded-[24px] px-8 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
-              placeholder="+91 97430 25459"
+              placeholder="+91 97430 25459 / 91645 02728"
             />
           </div>
         </div>
@@ -1293,7 +1471,7 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
                     value={formData.phone}
                     onChange={e => setFormData({...formData, phone: e.target.value})}
                     className="w-full bg-white border-2 border-stone-100 rounded-[24px] px-8 py-5 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
-                    placeholder="+91 97430 25459"
+                    placeholder="+91 97430 25459 / 91645 02728"
                   />
                 </div>
                 <div className="space-y-3">
@@ -2579,6 +2757,8 @@ export default function App() {
           </>
         )}
       </AnimatePresence>
+
+      <HelpChat t={t} language={language} />
     </div>
   );
 }
