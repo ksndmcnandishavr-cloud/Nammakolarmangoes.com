@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import Stripe from "stripe";
 import Razorpay from "razorpay";
+import admin from "firebase-admin";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -10,6 +11,50 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database("mangoes.db");
+
+// Initialize Firebase Admin
+let firestore: admin.firestore.Firestore | null = null;
+if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      }),
+    });
+    firestore = admin.firestore();
+    console.log("Firestore initialized successfully");
+    
+    // Seed Firestore if empty
+    const seedFirestore = async () => {
+      const productsSnapshot = await firestore!.collection("products").limit(1).get();
+      if (productsSnapshot.empty) {
+        console.log("Seeding Firestore with initial data...");
+        const products = [
+          { name: "Premium Alphonso", variety: "Alphonso", description: "The king of mangoes, known for its rich, creamy texture and sweet aroma.", price: 1200, stock: 50, image_url: "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800", available: 1 },
+          { name: "Sweet Badami", variety: "Badami", description: "Often called the Karnataka Alphonso, it's incredibly sweet and pulpy.", price: 800, stock: 100, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800", available: 1 },
+          { name: "Kesar Delight", variety: "Kesar", description: "Famous for its bright orange pulp and intense fragrance.", price: 950, stock: 75, image_url: "https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&q=80&w=800", available: 1 }
+        ];
+        for (const p of products) await firestore!.collection("products").add(p);
+
+        const testimonials = [
+          { name: "Amrutesh oli", rating: 5, review: "The best Alphonso mangoes I've ever had. They arrived perfectly ripe and the sweetness is unmatched.", date: "May 2025", language: "en", active: 1 },
+          { name: "ಅಮೃತೇಶ್ ಓಲಿ", rating: 5, review: "ನಾನು ತಿಂದ ಅತ್ಯುತ್ತಮ ಆಲ್ಪಾನ್ಸೋ ಮಾವಿನ ಹಣ್ಣುಗಳು. ಅವು ಸರಿಯಾಗಿ ಹಣ್ಣಾಗಿದ್ದವು ಮತ್ತು ಸಿಹಿ ಅದ್ಭುತವಾಗಿದೆ.", date: "May 2025", language: "kn", active: 1 }
+        ];
+        for (const t of testimonials) await firestore!.collection("testimonials").add(t);
+
+        const offers = [
+          { title: "Early Bird Special", description: "Get 10% off on your first order of the season!", code: "SEASON10", discount_percent: 10, active: 1, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" }
+        ];
+        for (const o of offers) await firestore!.collection("offers").add(o);
+      }
+    };
+    seedFirestore();
+  } catch (error) {
+    console.error("Failed to initialize Firebase Admin:", error);
+  }
+}
 
 // Initialize Database
 db.exec(`
@@ -61,6 +106,28 @@ db.exec(`
     active INTEGER DEFAULT 1,
     image_url TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS bookings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    date TEXT NOT NULL,
+    time TEXT NOT NULL,
+    guests INTEGER NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS testimonials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    rating INTEGER NOT NULL,
+    review TEXT NOT NULL,
+    date TEXT NOT NULL,
+    language TEXT DEFAULT 'en',
+    active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Seed initial data if empty
@@ -70,6 +137,15 @@ if (productCount.count === 0) {
   insert.run("Premium Alphonso", "Alphonso", "The king of mangoes, known for its rich, creamy texture and sweet aroma.", 1200, 50, "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800");
   insert.run("Sweet Badami", "Badami", "Often called the Karnataka Alphonso, it's incredibly sweet and pulpy.", 800, 100, "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800");
   insert.run("Kesar Delight", "Kesar", "Famous for its bright orange pulp and intense fragrance.", 950, 75, "https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&q=80&w=800");
+}
+
+const testimonialCount = db.prepare("SELECT count(*) as count FROM testimonials").get() as { count: number };
+if (testimonialCount.count === 0) {
+  const insert = db.prepare("INSERT INTO testimonials (name, rating, review, date, language) VALUES (?, ?, ?, ?, ?)");
+  insert.run("Amrutesh oli", 5, "The best Alphonso mangoes I've ever had. They arrived perfectly ripe and the sweetness is unmatched. Reminds me of my childhood summers in Kolar.", "May 2025", "en");
+  insert.run("ಅಮೃತೇಶ್ ಓಲಿ", 5, "ನಾನು ತಿಂದ ಅತ್ಯುತ್ತಮ ಆಲ್ಪಾನ್ಸೋ ಮಾವಿನ ಹಣ್ಣುಗಳು. ಅವು ಸರಿಯಾಗಿ ಹಣ್ಣಾಗಿದ್ದವು ಮತ್ತು ಸಿಹಿ ಅದ್ಭುತವಾಗಿದೆ. ಕೋಲಾರದಲ್ಲಿ ಕಳೆದ ನನ್ನ ಬಾಲ್ಯದ ದಿನಗಳನ್ನು ನೆನಪಿಸುತ್ತದೆ.", "May 2025", "kn");
+  insert.run("Priya Sharma", 5, "Ordered 10kg for a family gathering. Everyone was asking where I got them from. The packaging was very secure and eco-friendly.", "June 2025", "en");
+  insert.run("ಪ್ರಿಯಾ ಶರ್ಮಾ", 5, "ಕುಟುಂಬದ ಸಮಾರಂಭಕ್ಕಾಗಿ 10 ಕೆಜಿ ಆರ್ಡರ್ ಮಾಡಿದ್ದೆ. ಎಲ್ಲರೂ ಇವುಗಳನ್ನು ಎಲ್ಲಿಂದ ತಂದೆ ಎಂದು ಕೇಳುತ್ತಿದ್ದರು. ಪ್ಯಾಕೇಜಿಂಗ್ ತುಂಬಾ ಸುರಕ್ಷಿತವಾಗಿತ್ತು.", "June 2025", "kn");
 }
 
 const offerCount = db.prepare("SELECT count(*) as count FROM offers").get() as { count: number };
@@ -94,50 +170,100 @@ async function startServer() {
   }) : null;
 
   // API Routes
-  app.get("/api/products", (req, res) => {
+  app.get("/api/db-status", (req, res) => {
+    res.json({ 
+      type: firestore ? "Firestore" : "SQLite",
+      connected: !!firestore || !!db
+    });
+  });
+
+  app.get("/api/products", async (req, res) => {
+    if (firestore) {
+      const snapshot = await firestore.collection("products").get();
+      const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return res.json(products);
+    }
     const products = db.prepare("SELECT * FROM products").all();
     res.json(products);
   });
 
-  app.post("/api/products", (req, res) => {
+  app.post("/api/products", async (req, res) => {
     const { name, variety, description, price, stock, image_url } = req.body;
+    if (firestore) {
+      const docRef = await firestore.collection("products").add({
+        name, variety, description, price, stock, image_url, available: 1
+      });
+      return res.json({ id: docRef.id });
+    }
     const info = db.prepare("INSERT INTO products (name, variety, description, price, stock, image_url) VALUES (?, ?, ?, ?, ?, ?)")
       .run(name, variety, description, price, stock, image_url);
     res.json({ id: info.lastInsertRowid });
   });
 
-  app.put("/api/products/:id", (req, res) => {
+  app.put("/api/products/:id", async (req, res) => {
     const { name, variety, description, price, stock, available } = req.body;
+    if (firestore) {
+      await firestore.collection("products").doc(req.params.id).update({
+        name, variety, description, price, stock, available: available ? 1 : 0
+      });
+      return res.json({ success: true });
+    }
     db.prepare("UPDATE products SET name = ?, variety = ?, description = ?, price = ?, stock = ?, available = ? WHERE id = ?")
       .run(name, variety, description, price, stock, available ? 1 : 0, req.params.id);
     res.json({ success: true });
   });
 
-  app.get("/api/offers", (req, res) => {
+  app.get("/api/offers", async (req, res) => {
+    if (firestore) {
+      const snapshot = await firestore.collection("offers").get();
+      const offers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return res.json(offers);
+    }
     const offers = db.prepare("SELECT * FROM offers").all();
     res.json(offers);
   });
 
-  app.post("/api/offers", (req, res) => {
+  app.post("/api/offers", async (req, res) => {
     const { title, description, code, discount_percent, image_url } = req.body;
+    if (firestore) {
+      const docRef = await firestore.collection("offers").add({
+        title, description, code, discount_percent, image_url, active: 1
+      });
+      return res.json({ id: docRef.id });
+    }
     const info = db.prepare("INSERT INTO offers (title, description, code, discount_percent, image_url) VALUES (?, ?, ?, ?, ?)")
       .run(title, description, code, discount_percent, image_url);
     res.json({ id: info.lastInsertRowid });
   });
 
-  app.put("/api/offers/:id", (req, res) => {
+  app.put("/api/offers/:id", async (req, res) => {
     const { title, description, code, discount_percent, active } = req.body;
+    if (firestore) {
+      await firestore.collection("offers").doc(req.params.id).update({
+        title, description, code, discount_percent, active: active ? 1 : 0
+      });
+      return res.json({ success: true });
+    }
     db.prepare("UPDATE offers SET title = ?, description = ?, code = ?, discount_percent = ?, active = ? WHERE id = ?")
       .run(title, description, code, discount_percent, active ? 1 : 0, req.params.id);
     res.json({ success: true });
   });
 
-  app.delete("/api/offers/:id", (req, res) => {
+  app.delete("/api/offers/:id", async (req, res) => {
+    if (firestore) {
+      await firestore.collection("offers").doc(req.params.id).delete();
+      return res.json({ success: true });
+    }
     db.prepare("DELETE FROM offers WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
-  app.get("/api/orders", (req, res) => {
+  app.get("/api/orders", async (req, res) => {
+    if (firestore) {
+      const snapshot = await firestore.collection("orders").orderBy("created_at", "desc").get();
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return res.json(orders);
+    }
     const orders = db.prepare(`
       SELECT o.*, GROUP_CONCAT(p.name || ' (' || oi.quantity || 'x' || oi.price || ')') as items
       FROM orders o
@@ -149,17 +275,32 @@ async function startServer() {
     res.json(orders);
   });
 
-  app.put("/api/orders/:id", (req, res) => {
+  app.put("/api/orders/:id", async (req, res) => {
     const { status, tracking_id, estimated_delivery } = req.body;
+    if (firestore) {
+      await firestore.collection("orders").doc(req.params.id).update({
+        status, tracking_id, estimated_delivery
+      });
+      return res.json({ success: true });
+    }
     db.prepare("UPDATE orders SET status = ?, tracking_id = ?, estimated_delivery = ? WHERE id = ?")
       .run(status, tracking_id, estimated_delivery, req.params.id);
     res.json({ success: true });
   });
 
-  app.get("/api/orders/history", (req, res) => {
+  app.get("/api/orders/history", async (req, res) => {
     const { email, phone } = req.query;
     if (!email && !phone) {
       return res.status(400).json({ error: "Email or phone required" });
+    }
+    if (firestore) {
+      let query: admin.firestore.Query = firestore.collection("orders");
+      if (email) query = query.where("customer_email", "==", email);
+      if (phone) query = query.where("phone", "==", phone);
+      
+      const snapshot = await query.orderBy("created_at", "desc").get();
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return res.json(orders);
     }
     const orders = db.prepare(`
       SELECT o.*, GROUP_CONCAT(p.name || ' (' || oi.quantity || 'x' || oi.price || ')') as items
@@ -173,7 +314,7 @@ async function startServer() {
     res.json(orders);
   });
 
-  app.post("/api/orders", (req, res) => {
+  app.post("/api/orders", async (req, res) => {
     const { 
       customer_name, 
       customer_email, 
@@ -189,6 +330,41 @@ async function startServer() {
       paid_amount
     } = req.body;
     
+    if (firestore) {
+      const orderData = {
+        customer_name, 
+        customer_email, 
+        address, 
+        phone, 
+        total, 
+        delivery_charge, 
+        promo_code,
+        payment_id,
+        payment_status,
+        payment_method,
+        paid_amount,
+        status: 'pending',
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        items: items.map((item: any) => ({
+          product_id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price
+        }))
+      };
+      const docRef = await firestore.collection("orders").add(orderData);
+      
+      // Update stock in Firestore
+      for (const item of items) {
+        const productRef = firestore.collection("products").doc(String(item.id));
+        await productRef.update({
+          stock: admin.firestore.FieldValue.increment(-item.quantity)
+        });
+      }
+      
+      return res.json({ id: docRef.id });
+    }
+
     const transaction = db.transaction(() => {
       const info = db.prepare(`
         INSERT INTO orders (
@@ -297,8 +473,16 @@ async function startServer() {
     }
   });
 
-  app.get("/api/buyer/history", (req, res) => {
+  app.get("/api/buyer/history", async (req, res) => {
     const { email } = req.query;
+    if (firestore) {
+      const snapshot = await firestore.collection("orders")
+        .where("customer_email", "==", email)
+        .orderBy("created_at", "desc")
+        .get();
+      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return res.json(orders);
+    }
     const orders = db.prepare(`
       SELECT o.*, GROUP_CONCAT(p.name || ' (x' || oi.quantity || ')') as items
       FROM orders o
@@ -309,6 +493,54 @@ async function startServer() {
       ORDER BY o.created_at DESC
     `).all(email);
     res.json(orders);
+  });
+
+  // Bookings
+  app.post("/api/bookings", async (req, res) => {
+    const { name, phone, date, time, guests } = req.body;
+    if (firestore) {
+      const docRef = await firestore.collection("bookings").add({
+        name, phone, date, time, guests, status: 'pending', created_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return res.json({ id: docRef.id });
+    }
+    const info = db.prepare("INSERT INTO bookings (name, phone, date, time, guests) VALUES (?, ?, ?, ?, ?)")
+      .run(name, phone, date, time, guests);
+    res.json({ id: info.lastInsertRowid });
+  });
+
+  app.get("/api/bookings", async (req, res) => {
+    if (firestore) {
+      const snapshot = await firestore.collection("bookings").orderBy("date", "desc").get();
+      const bookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return res.json(bookings);
+    }
+    const bookings = db.prepare("SELECT * FROM bookings ORDER BY date DESC, time DESC").all();
+    res.json(bookings);
+  });
+
+  app.put("/api/bookings/:id", async (req, res) => {
+    const { status } = req.body;
+    if (firestore) {
+      await firestore.collection("bookings").doc(req.params.id).update({ status });
+      return res.json({ success: true });
+    }
+    db.prepare("UPDATE bookings SET status = ? WHERE id = ?").run(status, req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get("/api/testimonials", async (req, res) => {
+    const { language } = req.query;
+    if (firestore) {
+      const snapshot = await firestore.collection("testimonials")
+        .where("active", "==", 1)
+        .where("language", "==", language || 'en')
+        .get();
+      const testimonials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return res.json(testimonials);
+    }
+    const testimonials = db.prepare("SELECT * FROM testimonials WHERE active = 1 AND language = ?").all(language || 'en');
+    res.json(testimonials);
   });
 
   // Vite middleware for development

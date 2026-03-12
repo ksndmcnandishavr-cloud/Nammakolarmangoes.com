@@ -384,31 +384,7 @@ const SkeletonCard = () => (
   </Card>
 );
 
-const Testimonials = ({ t, language }: any) => {
-  const testimonials: Testimonial[] = [
-    {
-      id: 1,
-      name: language === 'en' ? "Amrutesh oli" : "ಅಮೃತೇಶ್ ಓಲಿ",
-      rating: 5,
-      review: language === 'en' ? "The best Alphonso mangoes I've ever had. They arrived perfectly ripe and the sweetness is unmatched. Reminds me of my childhood summers in Kolar." : "ನಾನು ತಿಂದ ಅತ್ಯುತ್ತಮ ಆಲ್ಪಾನ್ಸೋ ಮಾವಿನ ಹಣ್ಣುಗಳು. ಅವು ಸರಿಯಾಗಿ ಹಣ್ಣಾಗಿದ್ದವು ಮತ್ತು ಸಿಹಿ ಅದ್ಭುತವಾಗಿದೆ. ಕೋಲಾರದಲ್ಲಿ ಕಳೆದ ನನ್ನ ಬಾಲ್ಯದ ದಿನಗಳನ್ನು ನೆನಪಿಸುತ್ತದೆ.",
-      date: "May 2025"
-    },
-    {
-      id: 2,
-      name: language === 'en' ? "Priya Sharma" : "ಪ್ರಿಯಾ ಶರ್ಮಾ",
-      rating: 5,
-      review: language === 'en' ? "Ordered 10kg for a family gathering. Everyone was asking where I got them from. The packaging was very secure and eco-friendly." : "ಕುಟುಂಬದ ಸಮಾರಂಭಕ್ಕಾಗಿ 10 ಕೆಜಿ ಆರ್ಡರ್ ಮಾಡಿದ್ದೆ. ಎಲ್ಲರೂ ಇವುಗಳನ್ನು ಎಲ್ಲಿಂದ ತಂದೆ ಎಂದು ಕೇಳುತ್ತಿದ್ದರು. ಪ್ಯಾಕೇಜಿಂಗ್ ತುಂಬಾ ಸುರಕ್ಷಿತವಾಗಿತ್ತು.",
-      date: "June 2025"
-    },
-    {
-      id: 3,
-      name: language === 'en' ? "Suresh Kumar" : "ಸುರೇಶ್ ಕುಮಾರ್",
-      rating: 4,
-      review: language === 'en' ? "Authentic taste. You can really tell the difference between these organic mangoes and the ones from the local market. Will definitely order again." : "ಅಪ್ಪಟ ರುಚಿ. ಈ ಸಾವಯವ ಮಾವಿನ ಹಣ್ಣುಗಳು ಮತ್ತು ಸ್ಥಳೀಯ ಮಾರುಕಟ್ಟೆಯ ಹಣ್ಣುಗಳ ನಡುವಿನ ವ್ಯತ್ಯಾಸವನ್ನು ನೀವು ಸುಲಭವಾಗಿ ಗುರುತಿಸಬಹುದು.",
-      date: "May 2025"
-    }
-  ];
-
+const Testimonials = ({ t, language, testimonials }: any) => {
   return (
     <section className="py-32 bg-stone-50 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6">
@@ -484,7 +460,7 @@ const Testimonials = ({ t, language }: any) => {
   );
 };
 
-const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartCount, onOpenAuth, onOpenHistory, onOpenBooking, heroBg, onHeroBgChange, isLoading, t, language, onLanguageChange }: any) => {
+const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onOpenCart, cartCount, onOpenAuth, onOpenHistory, onOpenBooking, heroBg, onHeroBgChange, isLoading, t, language, onLanguageChange }: any) => {
   return (
     <div className="min-h-screen pb-0">
       {/* Hero Section */}
@@ -796,7 +772,7 @@ const Storefront = ({ products, offers, onAddToCart, onBuyNow, onOpenCart, cartC
         </div>
       </section>
 
-      <Testimonials t={t} language={language} />
+      <Testimonials t={t} language={language} testimonials={testimonials} />
 
       {/* Footer */}
       <footer className="bg-brand-olive text-white pt-32 pb-48 md:pb-32">
@@ -1324,13 +1300,14 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount,
+          amount: Math.round(amount), // Ensure it's a whole number for the API
           receipt: `order_rcptid_${Date.now()}`
         })
       });
 
       if (!orderRes.ok) {
-        throw new Error('Failed to create Razorpay order on server');
+        const errorData = await orderRes.json();
+        throw new Error(errorData.error || 'Failed to create Razorpay order');
       }
 
       const orderData = await orderRes.json();
@@ -1370,23 +1347,14 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
         }
       };
 
-      const rzp = new Razorpay(options);
+      const rzp = new (window as any).Razorpay(options);
       rzp.open();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Razorpay integration error:", error);
       setIsProcessing(false);
-      
-      // Fallback: Provide the payment link if server-side order creation fails or modal fails
-      const confirmFallback = confirm("Direct payment integration is currently unavailable. Would you like to proceed with our secure Razorpay payment page instead?");
-      if (confirmFallback) {
-        window.open(paymentPageUrl, "_blank");
-        onSubmit({
-          ...formData,
-          payment_status: 'pending_link',
-          payment_method: paymentMethod,
-          paid_amount: 0
-        }, deliveryCharge);
-      }
+      alert(language === 'en' 
+        ? `Payment initialization failed: ${error.message}. Please try again or contact support.` 
+        : `ಪಾವತಿ ಪ್ರಾರಂಭಿಸಲು ವಿಫಲವಾಗಿದೆ: ${error.message}. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.`);
     }
   };
 
@@ -1687,8 +1655,32 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
 
 const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProduct, onDeleteProduct, onUpdateOffer, onDeleteOffer, onAddOffer, onUpdateOrder, onLogout, isLoading }: any) => {
   const [activeTab, setActiveTab] = useState('inventory');
+  const [bookings, setBookings] = useState<any[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingOffer, setIsAddingOffer] = useState(false);
+  const [dbStatus, setDbStatus] = useState<{ type: string, connected: boolean } | null>(null);
+
+  const fetchBookings = async () => {
+    const res = await fetch('/api/bookings');
+    const data = await res.json();
+    setDbStatus(await (await fetch('/api/db-status')).json());
+    setBookings(data);
+  };
+
+  const handleUpdateBooking = async (id: number, status: string) => {
+    await fetch(`/api/bookings/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    fetchBookings();
+  };
+
+  useEffect(() => {
+    if (activeTab === 'bookings') {
+      fetchBookings();
+    }
+  }, [activeTab]);
   const [newProduct, setNewProduct] = useState({
     name: '',
     variety: '',
@@ -1751,6 +1743,15 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
             >
               Offers
             </button>
+            <button 
+              onClick={() => setActiveTab('bookings')}
+              className={cn(
+                "font-sans text-sm transition-colors",
+                activeTab === 'bookings' ? "text-brand-olive font-semibold" : "text-stone-400"
+              )}
+            >
+              Bookings
+            </button>
           </div>
         </div>
         <button onClick={onLogout} className="p-2 hover:bg-stone-100 rounded-full text-stone-400">
@@ -1787,9 +1788,26 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
         >
           Offers
         </button>
+        <button 
+          onClick={() => setActiveTab('bookings')}
+          className={cn(
+            "flex-1 py-2 text-center font-sans text-xs uppercase tracking-widest",
+            activeTab === 'bookings' ? "text-brand-olive font-bold border-b-2 border-brand-olive" : "text-stone-400"
+          )}
+        >
+          Bookings
+        </button>
       </div>
 
       <main className="max-w-7xl mx-auto px-6 md:px-8 py-8 md:py-12">
+        {dbStatus && (
+          <div className="flex items-center gap-2 mb-8 bg-white px-4 py-2 rounded-full warm-shadow w-fit">
+            <div className={cn("w-2 h-2 rounded-full", dbStatus.connected ? "bg-emerald-500" : "bg-red-500")} />
+            <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">
+              Database: {dbStatus.type}
+            </span>
+          </div>
+        )}
         {activeTab === 'inventory' ? (
           // ... inventory content ...
           <div className="space-y-8">
@@ -2051,6 +2069,77 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                   </div>
                 </Card>
               ))}
+            </div>
+          </div>
+        ) : activeTab === 'bookings' ? (
+          <div className="space-y-8">
+            <h2 className="text-3xl font-serif italic">Farm Visit Bookings</h2>
+            <div className="grid grid-cols-1 gap-6">
+              {bookings.length === 0 ? (
+                <div className="text-center py-24 bg-white rounded-[32px] warm-shadow">
+                  <Calendar className="w-12 h-12 text-stone-200 mx-auto mb-4" />
+                  <p className="text-stone-400 font-serif italic">No bookings yet</p>
+                </div>
+              ) : (
+                bookings.map((booking: any) => (
+                  <Card key={booking.id} className="space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-sans text-stone-400">Booking #{booking.id}</span>
+                          <span className={cn(
+                            "px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-bold",
+                            booking.status === 'confirmed' ? "bg-emerald-50 text-emerald-600" : "bg-stone-100 text-stone-400"
+                          )}>
+                            {booking.status}
+                          </span>
+                        </div>
+                        <h3 className="text-xl font-serif italic">{booking.name}</h3>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-serif italic text-brand-olive">{booking.date}</p>
+                        <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">{booking.time}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4 border-y border-stone-100">
+                      <div className="flex items-start gap-3">
+                        <Phone className="w-4 h-4 text-stone-400 mt-1" />
+                        <p className="text-xs font-sans text-stone-500">{booking.phone}</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <User className="w-4 h-4 text-stone-400 mt-1" />
+                        <p className="text-xs font-sans text-stone-500">{booking.guests} Guests</p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2">
+                      <span className="text-[10px] font-sans text-stone-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3" /> Booked on {new Date(booking.created_at).toLocaleString()}
+                      </span>
+                      <div className="flex gap-2">
+                        {booking.status !== 'confirmed' && (
+                          <Button 
+                            onClick={() => handleUpdateBooking(booking.id, 'confirmed')}
+                            className="px-4 py-2 text-xs"
+                          >
+                            Confirm Booking
+                          </Button>
+                        )}
+                        {booking.status !== 'cancelled' && (
+                          <Button 
+                            onClick={() => handleUpdateBooking(booking.id, 'cancelled')}
+                            variant="danger" 
+                            className="px-4 py-2 text-xs"
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              )}
             </div>
           </div>
         ) : (
@@ -2346,6 +2435,7 @@ export default function App() {
   const [view, setView] = useState<'store' | 'checkout' | 'seller' | 'history'>('store');
   const [products, setProducts] = useState<Product[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [appliedOffer, setAppliedOffer] = useState<Offer | null>(null);
@@ -2370,7 +2460,8 @@ export default function App() {
   useEffect(() => {
     fetchProducts();
     fetchOffers();
-  }, []);
+    fetchTestimonials();
+  }, [language]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -2382,6 +2473,16 @@ export default function App() {
       console.error("Failed to fetch products:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchTestimonials = async () => {
+    try {
+      const res = await fetch(`/api/testimonials?language=${language}`);
+      const data = await res.json();
+      setTestimonials(data);
+    } catch (error) {
+      console.error("Failed to fetch testimonials:", error);
     }
   };
 
@@ -2420,10 +2521,22 @@ export default function App() {
     setView('checkout');
   };
 
-  const handleBookFarmVisit = (bookingData: any) => {
-    console.log('Farm Visit Booked:', bookingData);
-    showToast(`Farm visit booked for ${bookingData.date} at ${bookingData.time}!`);
-    // In a real app, we would send this to the backend
+  const handleBookFarmVisit = async (bookingData: any) => {
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bookingData)
+      });
+      if (res.ok) {
+        showToast(`Farm visit booked for ${bookingData.date} at ${bookingData.time}!`);
+      } else {
+        throw new Error("Failed to book");
+      }
+    } catch (error) {
+      console.error("Booking error:", error);
+      showToast("Failed to book farm visit. Please try again.");
+    }
   };
 
   const handleUpdateQuantity = (id: number, weight: number, quantity: number) => {
@@ -2473,7 +2586,8 @@ export default function App() {
       alert(successMessage);
       setCart([]);
       setAppliedOffer(null);
-      setView('store');
+      setBuyerEmail(formData.email);
+      setView('history');
       fetchProducts();
     });
   };
@@ -2615,6 +2729,7 @@ export default function App() {
         <Storefront 
           products={products} 
           offers={offers}
+          testimonials={testimonials}
           onAddToCart={handleAddToCart}
           onBuyNow={handleBuyNow}
           onOpenCart={() => setIsCartOpen(true)}
