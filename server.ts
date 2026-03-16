@@ -14,46 +14,78 @@ const db = new Database("mangoes.db");
 
 // Initialize Firebase Admin
 let firestore: admin.firestore.Firestore | null = null;
+let firestoreError: string | null = null;
+
 if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      }),
-    });
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY
+      .trim()
+      .replace(/,$/, '')             // Remove trailing comma if present
+      .replace(/^["']+|["']+$/g, '') // Remove all leading/trailing quotes
+      .replace(/\\n/g, '\n')         // Convert literal \n to newlines
+      .replace(/\r\n/g, '\n');       // Normalize line endings
+
+    // Ensure it has the correct PEM headers/footers if they were somehow mangled
+    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+      privateKey = `-----BEGIN PRIVATE KEY-----\n${privateKey}`;
+    }
+    if (!privateKey.includes('-----END PRIVATE KEY-----')) {
+      privateKey = `${privateKey}\n-----END PRIVATE KEY-----`;
+    }
+
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: privateKey,
+        }),
+      });
+    }
     firestore = admin.firestore();
     console.log("Firestore initialized successfully");
     
     // Seed Firestore if empty
     const seedFirestore = async () => {
-      const productsSnapshot = await firestore!.collection("products").limit(1).get();
-      if (productsSnapshot.empty) {
-        console.log("Seeding Firestore with initial data...");
-        const products = [
-          { name: "Premium Alphonso", variety: "Alphonso", description: "The king of mangoes, known for its rich, creamy texture and sweet aroma.", price: 1200, stock: 50, image_url: "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800", available: 1 },
-          { name: "Sweet Badami", variety: "Badami", description: "Often called the Karnataka Alphonso, it's incredibly sweet and pulpy.", price: 800, stock: 100, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800", available: 1 },
-          { name: "Kesar Delight", variety: "Kesar", description: "Famous for its bright orange pulp and intense fragrance.", price: 950, stock: 75, image_url: "https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&q=80&w=800", available: 1 }
-        ];
-        for (const p of products) await firestore!.collection("products").add(p);
+      try {
+        const productsSnapshot = await firestore!.collection("products").limit(1).get();
+        if (productsSnapshot.empty) {
+          console.log("Seeding Firestore with initial data...");
+          const products = [
+            { name: "Premium Alphonso", variety: "Alphonso", description: "The king of mangoes, known for its rich, creamy texture and sweet aroma.", price: 1200, stock: 50, image_url: "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800", available: 1 },
+            { name: "Sweet Badami", variety: "Badami", description: "Often called the Karnataka Alphonso, it's incredibly sweet and pulpy.", price: 800, stock: 100, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800", available: 1 },
+            { name: "Kesar Delight", variety: "Kesar", description: "Famous for its bright orange pulp and intense fragrance.", price: 950, stock: 75, image_url: "https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&q=80&w=800", available: 1 }
+          ];
+          for (const p of products) await firestore!.collection("products").add(p);
 
-        const testimonials = [
-          { name: "Amrutesh oli", rating: 5, review: "The best Alphonso mangoes I've ever had. They arrived perfectly ripe and the sweetness is unmatched.", date: "May 2025", language: "en", active: 1 },
-          { name: "ಅಮೃತೇಶ್ ಓಲಿ", rating: 5, review: "ನಾನು ತಿಂದ ಅತ್ಯುತ್ತಮ ಆಲ್ಪಾನ್ಸೋ ಮಾವಿನ ಹಣ್ಣುಗಳು. ಅವು ಸರಿಯಾಗಿ ಹಣ್ಣಾಗಿದ್ದವು ಮತ್ತು ಸಿಹಿ ಅದ್ಭುತವಾಗಿದೆ.", date: "May 2025", language: "kn", active: 1 }
-        ];
-        for (const t of testimonials) await firestore!.collection("testimonials").add(t);
+          const testimonials = [
+            { name: "Amrutesh oli", rating: 5, review: "The best Kolar mangoes I've ever had. They arrived perfectly ripe and the sweetness is unmatched.", date: "May 2025", language: "en", active: 1 },
+            { name: "ಅಮೃತೇಶ್ ಓಲಿ", rating: 5, review: "ನಾನು ತಿಂದ ಅತ್ಯುತ್ತಮ ಕೋಲಾರ ಮಾವಿನ ಹಣ್ಣುಗಳು. ಅವು ಸರಿಯಾಗಿ ಹಣ್ಣಾಗಿದ್ದವು ಮತ್ತು ಸಿಹಿ ಅದ್ಭುತವಾಗಿದೆ.", date: "May 2025", language: "kn", active: 1 }
+          ];
+          for (const t of testimonials) await firestore!.collection("testimonials").add(t);
 
-        const offers = [
-          { title: "Early Bird Special", description: "Get 10% off on your first order of the season!", code: "SEASON10", discount_percent: 10, active: 1, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" }
-        ];
-        for (const o of offers) await firestore!.collection("offers").add(o);
+          const offers = [
+            { title: "Kolar Harvest Special", description: "Get 10% off on your first order of the season!", code: "KOLAR10", discount_percent: 10, active: 1, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" }
+          ];
+          for (const o of offers) await firestore!.collection("offers").add(o);
+          console.log("Firestore seeded successfully");
+        }
+      } catch (e) {
+        console.error("Error seeding Firestore:", e);
       }
     };
     seedFirestore();
-  } catch (error) {
-    console.error("Failed to initialize Firebase Admin:", error);
+  } catch (error: any) {
+    console.error("Firestore initialization error details:", {
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
+    firestoreError = error.message;
   }
+} else {
+  console.log("Firestore environment variables missing. Falling back to SQLite.");
+  firestoreError = "Missing environment variables";
 }
 
 // Initialize Database
@@ -170,10 +202,38 @@ async function startServer() {
   }) : null;
 
   // API Routes
-  app.get("/api/db-status", (req, res) => {
+  app.get("/api/db-status", async (req, res) => {
+    let isConnected = false;
+    let details = "";
+
+    if (firestore) {
+      try {
+        // Try a simple read to verify connection
+        await firestore.collection("products").limit(1).get();
+        isConnected = true;
+        details = "Connected to Firestore";
+      } catch (e: any) {
+        isConnected = false;
+        details = `Firestore connection failed: ${e.message}`;
+        console.error(details);
+      }
+    } else {
+      isConnected = !!db;
+      details = firestoreError ? `Falling back to SQLite: ${firestoreError}` : "Using SQLite";
+    }
+
     res.json({ 
       type: firestore ? "Firestore" : "SQLite",
-      connected: !!firestore || !!db
+      connected: isConnected,
+      details: details
+    });
+  });
+
+  app.get("/api/db-status", (req, res) => {
+    res.json({
+      connected: !!firestore,
+      type: firestore ? "Firestore" : "SQLite",
+      error: firestoreError
     });
   });
 

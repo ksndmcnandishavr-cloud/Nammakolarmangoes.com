@@ -264,10 +264,17 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t }: any) => {
               {product.variety}
             </span>
           </div>
-          {product.stock < 10 && (
+          {product.stock < 10 && product.available === 1 && (
             <div className="absolute top-10 right-10">
               <span className="bg-red-500 text-white px-5 py-2 rounded-full text-[10px] font-sans font-bold uppercase tracking-[0.2em] shadow-lg animate-pulse">
                 Limited
+              </span>
+            </div>
+          )}
+          {product.available === 0 && (
+            <div className="absolute inset-0 bg-stone-900/40 backdrop-blur-[2px] flex items-center justify-center z-20">
+              <span className="bg-white text-stone-900 px-8 py-3 rounded-full text-xs font-sans font-bold uppercase tracking-[0.3em] shadow-2xl">
+                {t.outOfStock}
               </span>
             </div>
           )}
@@ -322,7 +329,7 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t }: any) => {
           <div className="flex gap-4">
             <Button 
               variant="secondary"
-              disabled={product.stock < selectedWeight}
+              disabled={product.available === 0 || product.stock < selectedWeight}
               onClick={() => onAddToCart(product, selectedWeight)}
               className="flex-1 py-5 group/btn overflow-hidden relative border-stone-200"
             >
@@ -333,12 +340,12 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t }: any) => {
             </Button>
             <Button 
               variant="mango"
-              disabled={product.stock < selectedWeight}
+              disabled={product.available === 0 || product.stock < selectedWeight}
               onClick={() => onBuyNow(product, selectedWeight)}
               className="flex-[2] py-5 group/btn overflow-hidden relative"
             >
               <span className="relative z-10">
-                {product.stock < selectedWeight ? t.outOfStock : t.buyNow}
+                {product.available === 0 ? t.outOfStock : (product.stock < selectedWeight ? t.outOfStock : t.buyNow)}
               </span>
               <motion.div 
                 className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-500"
@@ -460,11 +467,167 @@ const Testimonials = ({ t, language, testimonials }: any) => {
   );
 };
 
-const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onOpenCart, cartCount, onOpenAuth, onOpenHistory, onOpenBooking, heroBg, onHeroBgChange, isLoading, t, language, onLanguageChange }: any) => {
+// --- Components ---
+
+const Header = ({ onOpenCart, cartCount, onOpenAuth, onOpenHistory, setView, t, language, onLanguageChange }: any) => {
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 50);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  return (
+    <motion.header 
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      className={cn(
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-500 px-6 py-4",
+        isScrolled ? "bg-white/80 backdrop-blur-lg shadow-lg" : "bg-transparent"
+      )}
+    >
+      <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div 
+          onClick={() => { setView('store'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          className="flex items-center gap-3 cursor-pointer group"
+        >
+          <div className="w-10 h-10 bg-brand-mango rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
+            <ShoppingBasket className="w-6 h-6 text-stone-900" />
+          </div>
+          <div className="hidden sm:block">
+            <h1 className={cn("font-serif italic text-xl leading-none", isScrolled ? "text-stone-900" : "text-white")}>Namma Kolar</h1>
+            <p className={cn("text-[8px] font-sans font-bold uppercase tracking-[0.3em] mt-1", isScrolled ? "text-stone-400" : "text-white/40")}>Mangoes</p>
+          </div>
+        </div>
+
+        <nav className="hidden md:flex items-center gap-10">
+          {[
+            { id: 'heritage', label: t.ourStory },
+            { id: 'products', label: t.shopHarvest },
+            { id: 'visit', label: t.visitOurFarm },
+            { id: 'history', label: t.trackOrder }
+          ].map(item => (
+            <button 
+              key={item.id}
+              onClick={() => {
+                setView('store');
+                setTimeout(() => {
+                  const el = document.getElementById(item.id);
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              className={cn(
+                "text-[10px] font-sans font-bold uppercase tracking-[0.3em] hover:text-brand-mango transition-colors",
+                isScrolled ? "text-stone-500" : "text-white/70"
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => onLanguageChange(language === 'en' ? 'kn' : 'en')}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-widest transition-all",
+              isScrolled ? "bg-stone-100 text-stone-600 hover:bg-stone-200" : "bg-white/10 text-white hover:bg-white/20"
+            )}
+          >
+            {language === 'en' ? 'ಕನ್ನಡ' : 'English'}
+          </button>
+          
+          <div className="h-6 w-px bg-stone-200/20 mx-2" />
+
+          <button 
+            onClick={onOpenAuth}
+            className={cn(
+              "p-2.5 rounded-full transition-all hover:scale-110",
+              isScrolled ? "bg-stone-100 text-stone-600 hover:bg-stone-200" : "bg-white/10 text-white hover:bg-white/20"
+            )}
+          >
+            <User className="w-5 h-5" />
+          </button>
+
+          <button 
+            onClick={onOpenCart}
+            className={cn(
+              "relative p-2.5 rounded-full transition-all hover:scale-110",
+              isScrolled ? "bg-brand-mango text-stone-900" : "bg-white text-brand-olive"
+            )}
+          >
+            <ShoppingBasket className="w-5 h-5" />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-stone-900 text-white text-[8px] w-5 h-5 rounded-full flex items-center justify-center font-sans font-bold shadow-lg">
+                {cartCount}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+    </motion.header>
+  );
+};
+
+const Footer = ({ t, language, onOpenHistory, onOpenAuth }: any) => (
+  <footer className="bg-brand-olive text-white pt-32 pb-48 md:pb-32">
+    <div className="max-w-7xl mx-auto px-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-20 mb-32">
+        <div className="md:col-span-2 space-y-10">
+          <h3 className="text-5xl font-serif italic leading-tight">{language === 'en' ? 'Namma Kolar' : 'ನಮ್ಮ ಕೋಲಾರ'} <br /> <span className="text-brand-mango">{language === 'en' ? 'Mangoes' : 'ಮಾವು'}</span></h3>
+          <p className="text-white/50 font-serif italic text-xl max-w-md">
+            {t.heroSubtitle}
+          </p>
+          <div className="flex gap-6">
+            {['Instagram', 'Facebook', 'Twitter'].map(social => (
+              <button key={social} className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-white/40 hover:text-brand-mango transition-colors">
+                {social}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        <div className="space-y-8">
+          <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-mango">{t.quickLinks}</p>
+          <ul className="space-y-4 font-serif italic text-lg text-white/60">
+            <li><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="hover:text-white transition-colors">{t.home}</button></li>
+            <li><button onClick={() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.shopHarvest}</button></li>
+            <li><button onClick={() => document.getElementById('heritage')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.ourStory}</button></li>
+            <li><button onClick={() => document.getElementById('visit')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.visitOurFarm}</button></li>
+            <li><button onClick={() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.trackOrder}</button></li>
+            <li><button onClick={onOpenAuth} className="hover:text-white transition-colors">{language === 'en' ? 'Seller Access' : 'ಮಾರಾಟಗಾರರ ಪ್ರವೇಶ'}</button></li>
+          </ul>
+        </div>
+
+        <div className="space-y-8">
+          <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-mango">{t.contactUs}</p>
+          <ul className="space-y-4 font-serif italic text-lg text-white/60">
+            <li className="text-white font-bold not-italic">{language === 'en' ? 'Ramakrishnareddy V N' : 'ರಾಮಕೃಷ್ಣರೆಡ್ಡಿ ವಿ ಎನ್'}</li>
+            <li>{language === 'en' ? 'Varatanahalli, Srinivasapura, Kolar, Karnataka-563135' : 'ವರತನಹಳ್ಳಿ, ಶ್ರೀನಿವಾಸಪುರ, ಕೋಲಾರ, ಕರ್ನಾಟಕ-563135'}</li>
+            <li>+91 97430 25459 / 91645 02728</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="pt-12 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-8">
+        <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30">
+          {t.allRightsReserved}
+        </p>
+        <div className="flex gap-8">
+          <button className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30 hover:text-white transition-colors">{t.privacyPolicy}</button>
+          <button className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30 hover:text-white transition-colors">{t.termsOfService}</button>
+        </div>
+      </div>
+    </div>
+  </footer>
+);
+
+const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onOpenCart, cartCount, onOpenAuth, onOpenHistory, onOpenBooking, heroBg, onHeroBgChange, isLoading, t, language, onLanguageChange, buyerEmail }: any) => {
   return (
     <div className="min-h-screen pb-0">
       {/* Hero Section */}
-      <section className="relative h-[90vh] md:h-screen flex items-center justify-center overflow-hidden bg-brand-olive">
+      <section id="home" className="relative h-[90vh] md:h-screen flex items-center justify-center overflow-hidden bg-brand-olive">
         <motion.div 
           key={heroBg}
           initial={{ scale: 1.1, opacity: 0 }}
@@ -480,17 +643,7 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
           />
         </motion.div>
 
-        {/* Header Controls */}
         <div className="absolute top-10 right-10 z-30 flex items-center gap-4">
-          {/* Language Toggle */}
-          <button 
-            onClick={() => onLanguageChange(language === 'en' ? 'kn' : 'en')}
-            className="flex items-center gap-2 bg-brand-mango/90 backdrop-blur-md border border-brand-mango/20 px-6 py-2 rounded-full text-[10px] font-sans font-bold uppercase tracking-widest text-stone-900 hover:bg-brand-mango transition-all shadow-lg shadow-brand-mango/20"
-          >
-            {language === 'en' ? 'ಕನ್ನಡ' : 'English'}
-          </button>
-
-          {/* Change Background Button */}
           <div className="hidden md:block">
             <button 
               onClick={() => {
@@ -676,7 +829,13 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
             <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em] mb-6 block">
               {t.theCollection}
             </span>
-            <h2 className="text-6xl md:text-9xl font-serif italic leading-[0.9] tracking-tighter">{language === 'en' ? 'The Varieties' : 'ಕೋಲಾರದ ವಿವಿಧ'} <br /> {language === 'en' ? 'of Kolar' : 'ತಳಿಗಳು'}</h2>
+            <h2 className="text-6xl md:text-9xl font-serif italic leading-[0.9] tracking-tighter">
+              {language === 'en' ? 'The Varieties' : 'ಕೋಲಾರದ ವಿವಿಧ'} <br /> 
+              {language === 'en' ? 'of Kolar' : 'ತಳಿಗಳು'}
+            </h2>
+            <p className="mt-8 text-stone-400 font-sans text-[10px] uppercase tracking-[0.3em] font-bold">
+              {language === 'en' ? 'All Varieties on Single Screen' : 'ಎಲ್ಲಾ ತಳಿಗಳು ಒಂದೇ ಪರದೆಯಲ್ಲಿ'}
+            </p>
           </div>
           <div className="flex gap-6">
             <button onClick={onOpenHistory} className="p-5 bg-white rounded-full warm-shadow hover:bg-stone-50 transition-all hover:scale-110 group">
@@ -700,7 +859,7 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
           {isLoading ? (
             [1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)
           ) : (
-            products.filter((p: Product) => p.available).map((product: Product) => (
+            products.map((product: Product) => (
               <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} />
             ))
           )}
@@ -774,81 +933,12 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
 
       <Testimonials t={t} language={language} testimonials={testimonials} />
 
-      {/* Footer */}
-      <footer className="bg-brand-olive text-white pt-32 pb-48 md:pb-32">
+      {/* Order History Section */}
+      <section id="history" className="bg-brand-cream py-32">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-20 mb-32">
-            <div className="md:col-span-2 space-y-10">
-              <h3 className="text-5xl font-serif italic leading-tight">{language === 'en' ? 'Namma Kolar' : 'ನಮ್ಮ ಕೋಲಾರ'} <br /> <span className="text-brand-mango">{language === 'en' ? 'Mangoes' : 'ಮಾವು'}</span></h3>
-              <p className="text-white/50 font-serif italic text-xl max-w-md">
-                {t.heroSubtitle}
-              </p>
-              <div className="flex gap-6">
-                {['Instagram', 'Facebook', 'Twitter'].map(social => (
-                  <button key={social} className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-white/40 hover:text-brand-mango transition-colors">
-                    {social}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            <div className="space-y-8">
-              <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-mango">{t.quickLinks}</p>
-              <ul className="space-y-4 font-serif italic text-lg text-white/60">
-                <li><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="hover:text-white transition-colors">{t.home}</button></li>
-                <li><button onClick={() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.shopHarvest}</button></li>
-                <li><button onClick={() => document.getElementById('heritage')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.ourStory}</button></li>
-                <li><button onClick={() => document.getElementById('visit')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.visitOurFarm}</button></li>
-                <li><button onClick={onOpenHistory} className="hover:text-white transition-colors">{t.trackOrder}</button></li>
-              </ul>
-            </div>
-
-            <div className="space-y-8">
-              <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-mango">{t.contactUs}</p>
-              <ul className="space-y-4 font-serif italic text-lg text-white/60">
-                <li className="text-white font-bold not-italic">{language === 'en' ? 'Ramakrishnareddy V N' : 'ರಾಮಕೃಷ್ಣರೆಡ್ಡಿ ವಿ ಎನ್'}</li>
-                <li>{language === 'en' ? 'Varatanahalli, Srinivasapura, Kolar, Karnataka-563135' : 'ವರತನಹಳ್ಳಿ, ಶ್ರೀನಿವಾಸಪುರ, ಕೋಲಾರ, ಕರ್ನಾಟಕ-563135'}</li>
-                <li>+91 97430 25459 / 91645 02728</li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="pt-12 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-8">
-            <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30">
-              {t.allRightsReserved}
-            </p>
-            <div className="flex gap-8">
-              <button className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30 hover:text-white transition-colors">{t.privacyPolicy}</button>
-              <button className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30 hover:text-white transition-colors">{t.termsOfService}</button>
-            </div>
-          </div>
+          <OrderHistory initialEmail={buyerEmail} t={t} language={language} isSection={true} />
         </div>
-      </footer>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="fixed bottom-8 left-6 right-6 h-20 glass-card rounded-[32px] px-8 z-40 md:hidden flex justify-around items-center shadow-2xl border border-white/40">
-        <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex flex-col items-center gap-1 text-brand-olive">
-          <Package className="w-6 h-6" />
-          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{t.home}</span>
-        </button>
-        <button onClick={onOpenCart} className="relative flex flex-col items-center gap-1 text-stone-400">
-          <ShoppingBasket className="w-6 h-6" />
-          {cartCount > 0 && (
-            <span className="absolute -top-2 -right-2 bg-brand-mango text-stone-900 text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-sans font-bold shadow-lg">
-              {cartCount}
-            </span>
-          )}
-          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{t.basket}</span>
-        </button>
-        <button onClick={onOpenHistory} className="flex flex-col items-center gap-1 text-stone-400">
-          <Clock className="w-6 h-6" />
-          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</span>
-        </button>
-        <button onClick={onOpenAuth} className="flex flex-col items-center gap-1 text-stone-400">
-          <User className="w-6 h-6" />
-          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{language === 'en' ? 'Account' : 'ಖಾತೆ'}</span>
-        </button>
-      </div>
+      </section>
     </div>
   );
 };
@@ -860,7 +950,7 @@ const getDeliveryCharge = (weight: number) => {
   return 100;
 };
 
-const OrderHistory = ({ onBack, initialEmail, t, language }: any) => {
+const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: any) => {
   const [email, setEmail] = useState(initialEmail || '');
   const [phone, setPhone] = useState('');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -886,22 +976,27 @@ const OrderHistory = ({ onBack, initialEmail, t, language }: any) => {
     if (initialEmail) {
       fetchHistory(initialEmail, '');
     }
-  }, []);
+  }, [initialEmail]);
 
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto px-6 py-12 md:py-32"
+      className={cn("max-w-4xl mx-auto", !isSection && "px-6 py-12 md:py-32")}
     >
-      <button onClick={onBack} className="flex items-center gap-3 text-stone-400 mb-12 hover:text-brand-olive transition-all group">
-        <div className="p-2 bg-white rounded-full warm-shadow group-hover:scale-110 transition-all">
-          <ArrowLeft className="w-4 h-4" />
-        </div>
-        <span className="font-sans text-[10px] font-bold uppercase tracking-widest">{t.backToStore}</span>
-      </button>
+      {!isSection && (
+        <button onClick={onBack} className="flex items-center gap-3 text-stone-400 mb-12 hover:text-brand-olive transition-all group">
+          <div className="p-2 bg-white rounded-full warm-shadow group-hover:scale-110 transition-all">
+            <ArrowLeft className="w-4 h-4" />
+          </div>
+          <span className="font-sans text-[10px] font-bold uppercase tracking-widest">{t.backToStore}</span>
+        </button>
+      )}
 
-      <h2 className="text-5xl md:text-7xl font-serif italic mb-12 leading-tight">{language === 'en' ? 'Order' : 'ಆರ್ಡರ್'} <br />{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</h2>
+      <div className="mb-12">
+        <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em] mb-4 block">{language === 'en' ? 'Track Your' : 'ನಿಮ್ಮ ಆರ್ಡರ್'}</span>
+        <h2 className="text-5xl md:text-7xl font-serif italic leading-tight">{language === 'en' ? 'Order' : 'ಆರ್ಡರ್'} <br />{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</h2>
+      </div>
 
       <Card className="mb-16 p-8 md:p-10">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
@@ -1656,6 +1751,7 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
 const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProduct, onDeleteProduct, onUpdateOffer, onDeleteOffer, onAddOffer, onUpdateOrder, onLogout, isLoading }: any) => {
   const [activeTab, setActiveTab] = useState('inventory');
   const [bookings, setBookings] = useState<any[]>([]);
+  const [bookingFilter, setBookingFilter] = useState('all');
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingOffer, setIsAddingOffer] = useState(false);
   const [dbStatus, setDbStatus] = useState<{ type: string, connected: boolean } | null>(null);
@@ -2073,15 +2169,35 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
           </div>
         ) : activeTab === 'bookings' ? (
           <div className="space-y-8">
-            <h2 className="text-3xl font-serif italic">Farm Visit Bookings</h2>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <h2 className="text-3xl font-serif italic">Farm Visit Bookings</h2>
+              <div className="flex flex-wrap gap-2">
+                {['all', 'pending', 'confirmed', 'completed', 'cancelled'].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setBookingFilter(status)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-widest transition-all border",
+                      bookingFilter === status 
+                        ? "bg-brand-olive text-white border-brand-olive shadow-md" 
+                        : "bg-white text-stone-400 border-stone-100 hover:border-brand-olive/20"
+                    )}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-6">
-              {bookings.length === 0 ? (
+              {bookings.filter(b => bookingFilter === 'all' || b.status === bookingFilter).length === 0 ? (
                 <div className="text-center py-24 bg-white rounded-[32px] warm-shadow">
                   <Calendar className="w-12 h-12 text-stone-200 mx-auto mb-4" />
-                  <p className="text-stone-400 font-serif italic">No bookings yet</p>
+                  <p className="text-stone-400 font-serif italic">No {bookingFilter !== 'all' ? bookingFilter : ''} bookings found</p>
                 </div>
               ) : (
-                bookings.map((booking: any) => (
+                bookings
+                  .filter(b => bookingFilter === 'all' || b.status === bookingFilter)
+                  .map((booking: any) => (
                   <Card key={booking.id} className="space-y-4">
                     <div className="flex justify-between items-start">
                       <div>
@@ -2089,7 +2205,10 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                           <span className="text-xs font-sans text-stone-400">Booking #{booking.id}</span>
                           <span className={cn(
                             "px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-bold",
-                            booking.status === 'confirmed' ? "bg-emerald-50 text-emerald-600" : "bg-stone-100 text-stone-400"
+                            booking.status === 'confirmed' ? "bg-emerald-50 text-emerald-600" : 
+                            booking.status === 'cancelled' ? "bg-red-50 text-red-600" :
+                            booking.status === 'completed' ? "bg-blue-50 text-blue-600" :
+                            "bg-stone-100 text-stone-400"
                           )}>
                             {booking.status}
                           </span>
@@ -2113,26 +2232,44 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                       </div>
                     </div>
 
-                    <div className="flex justify-between items-center pt-2">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pt-2">
                       <span className="text-[10px] font-sans text-stone-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" /> Booked on {new Date(booking.created_at).toLocaleString()}
                       </span>
-                      <div className="flex gap-2">
-                        {booking.status !== 'confirmed' && (
+                      <div className="flex flex-wrap gap-2">
+                        {booking.status !== 'confirmed' && booking.status !== 'completed' && booking.status !== 'cancelled' && (
                           <Button 
                             onClick={() => handleUpdateBooking(booking.id, 'confirmed')}
-                            className="px-4 py-2 text-xs"
+                            className="px-4 py-2 text-[10px]"
                           >
-                            Confirm Booking
+                            Confirm
                           </Button>
                         )}
-                        {booking.status !== 'cancelled' && (
+                        {booking.status === 'confirmed' && (
+                          <Button 
+                            onClick={() => handleUpdateBooking(booking.id, 'completed')}
+                            variant="mango"
+                            className="px-4 py-2 text-[10px]"
+                          >
+                            Mark Completed
+                          </Button>
+                        )}
+                        {booking.status !== 'cancelled' && booking.status !== 'completed' && (
                           <Button 
                             onClick={() => handleUpdateBooking(booking.id, 'cancelled')}
                             variant="danger" 
-                            className="px-4 py-2 text-xs"
+                            className="px-4 py-2 text-[10px]"
                           >
                             Cancel
+                          </Button>
+                        )}
+                        {(booking.status === 'cancelled' || booking.status === 'completed') && (
+                          <Button 
+                            onClick={() => handleUpdateBooking(booking.id, 'pending')}
+                            variant="secondary"
+                            className="px-4 py-2 text-[10px]"
+                          >
+                            Reset to Pending
                           </Button>
                         )}
                       </div>
@@ -2448,6 +2585,7 @@ export default function App() {
   const [heroBg, setHeroBg] = useState('https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=2000');
   const [toast, setToast] = useState({ message: '', visible: false });
   const [isLoading, setIsLoading] = useState(true);
+  const [dbStatus, setDbStatus] = useState<{ type: string, connected: boolean } | null>(null);
 
   const showToast = (message: string) => {
     setToast({ message, visible: true });
@@ -2461,7 +2599,16 @@ export default function App() {
     fetchProducts();
     fetchOffers();
     fetchTestimonials();
+    fetchDbStatus();
   }, [language]);
+
+  const fetchDbStatus = async () => {
+    try {
+      const res = await fetch('/api/db-status');
+      const data = await res.json();
+      setDbStatus(data);
+    } catch (e) {}
+  };
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -2719,70 +2866,97 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-brand-cream">
       <Toast 
         message={toast.message} 
         isVisible={toast.visible} 
         onHide={() => setToast(prev => ({ ...prev, visible: false }))} 
       />
-      {view === 'store' && (
-        <Storefront 
-          products={products} 
-          offers={offers}
-          testimonials={testimonials}
-          onAddToCart={handleAddToCart}
-          onBuyNow={handleBuyNow}
-          onOpenCart={() => setIsCartOpen(true)}
-          cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
-          onOpenAuth={() => setIsAuthOpen(true)}
-          onOpenHistory={() => setView('history')}
-          onOpenBooking={() => setIsBookingModalOpen(true)}
-          heroBg={heroBg}
-          onHeroBgChange={setHeroBg}
-          isLoading={isLoading}
-          t={t}
-          language={language}
-          onLanguageChange={setLanguage}
-        />
-      )}
 
+      <Header 
+        onOpenCart={() => setIsCartOpen(true)}
+        cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenHistory={() => setView('history')}
+        setView={setView}
+        t={t}
+        language={language}
+        onLanguageChange={setLanguage}
+      />
 
-      {view === 'history' && (
-        <OrderHistory 
-          onBack={() => setView('store')} 
-          initialEmail={buyerEmail} 
-          t={t}
-          language={language}
-        />
-      )}
+      <main className="pt-20">
+        {view === 'store' && (
+          <Storefront 
+            products={products} 
+            offers={offers}
+            testimonials={testimonials}
+            onAddToCart={handleAddToCart}
+            onBuyNow={handleBuyNow}
+            onOpenCart={() => setIsCartOpen(true)}
+            cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
+            onOpenAuth={() => setIsAuthOpen(true)}
+            onOpenHistory={() => {
+              setView('store');
+              setTimeout(() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' }), 100);
+            }}
+            onOpenBooking={() => setIsBookingModalOpen(true)}
+            heroBg={heroBg}
+            onHeroBgChange={setHeroBg}
+            isLoading={isLoading}
+            t={t}
+            language={language}
+            onLanguageChange={setLanguage}
+            buyerEmail={buyerEmail}
+          />
+        )}
 
-      {view === 'checkout' && (
-        <CheckoutForm 
-          items={cart} 
-          appliedOffer={appliedOffer}
-          onBack={() => setView('store')}
-          onSubmit={handleCheckout}
-          t={t}
-          language={language}
-        />
-      )}
+        {view === 'history' && (
+          <OrderHistory 
+            onBack={() => setView('store')} 
+            initialEmail={buyerEmail} 
+            t={t}
+            language={language}
+          />
+        )}
 
-      {view === 'seller' && isSellerAuthenticated && (
-        <SellerDashboard 
-          products={products}
-          orders={orders}
-          offers={offers}
-          onUpdateProduct={handleUpdateProduct}
-          onAddProduct={handleAddProduct}
-          onDeleteProduct={handleDeleteProduct}
-          onUpdateOffer={handleUpdateOffer}
-          onDeleteOffer={handleDeleteOffer}
-          onAddOffer={handleAddOffer}
-          onUpdateOrder={handleUpdateOrder}
-          onLogout={() => { setIsSellerAuthenticated(false); setView('store'); }}
-          isLoading={isLoading}
-        />
-      )}
+        {view === 'checkout' && (
+          <CheckoutForm 
+            items={cart} 
+            appliedOffer={appliedOffer}
+            onBack={() => setView('store')}
+            onSubmit={handleCheckout}
+            t={t}
+            language={language}
+          />
+        )}
+
+        {view === 'seller' && isSellerAuthenticated && (
+          <SellerDashboard 
+            products={products}
+            orders={orders}
+            offers={offers}
+            onUpdateProduct={handleUpdateProduct}
+            onAddProduct={handleAddProduct}
+            onDeleteProduct={handleDeleteProduct}
+            onUpdateOffer={handleUpdateOffer}
+            onDeleteOffer={handleDeleteOffer}
+            onAddOffer={handleAddOffer}
+            onUpdateOrder={handleUpdateOrder}
+            onLogout={() => { setIsSellerAuthenticated(false); setView('store'); }}
+            isLoading={isLoading}
+          />
+        )}
+      </main>
+
+      <Footer 
+        t={t} 
+        language={language} 
+        onOpenHistory={() => {
+          setView('store');
+          setTimeout(() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }} 
+        onOpenAuth={() => setIsAuthOpen(true)}
+      />
 
       <CartDrawer 
         isOpen={isCartOpen}
@@ -2874,6 +3048,63 @@ export default function App() {
       </AnimatePresence>
 
       <HelpChat t={t} language={language} />
+
+      {/* Mobile Bottom Navigation */}
+      <div className="fixed bottom-8 left-6 right-6 h-20 bg-white/80 backdrop-blur-lg rounded-[32px] px-8 z-40 md:hidden flex justify-around items-center shadow-2xl border border-stone-100">
+        <button 
+          onClick={() => { setView('store'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
+          className={cn("flex flex-col items-center gap-1", view === 'store' ? "text-brand-olive" : "text-stone-400")}
+        >
+          <Package className="w-6 h-6" />
+          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{t.home}</span>
+        </button>
+        <button 
+          onClick={() => setIsCartOpen(true)} 
+          className="relative flex flex-col items-center gap-1 text-stone-400"
+        >
+          <ShoppingBasket className="w-6 h-6" />
+          {cart.length > 0 && (
+            <span className="absolute -top-2 -right-2 bg-brand-mango text-stone-900 text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-sans font-bold shadow-lg">
+              {cart.reduce((sum, i) => sum + i.quantity, 0)}
+            </span>
+          )}
+          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{t.basket}</span>
+        </button>
+        <button 
+          onClick={() => {
+            setView('store');
+            setTimeout(() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' }), 100);
+          }} 
+          className="flex flex-col items-center gap-1 text-stone-400"
+        >
+          <Clock className="w-6 h-6" />
+          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</span>
+        </button>
+        <button 
+          onClick={() => setIsAuthOpen(true)} 
+          className="flex flex-col items-center gap-1 text-stone-400"
+        >
+          <User className="w-6 h-6" />
+          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{language === 'en' ? 'Account' : 'ಖಾತೆ'}</span>
+        </button>
+      </div>
+
+      {dbStatus && (
+        <div 
+          title={dbStatus.details}
+          className="fixed bottom-4 left-4 z-[60] flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-stone-100 warm-shadow-sm pointer-events-auto opacity-50 hover:opacity-100 transition-opacity cursor-help"
+        >
+          <div className={cn("w-1.5 h-1.5 rounded-full", dbStatus.connected ? "bg-emerald-500" : "bg-red-500")} />
+          <span className="text-[8px] font-sans font-bold uppercase tracking-widest text-stone-400">
+            {dbStatus.type}
+          </span>
+          {!dbStatus.connected && (
+            <span className="text-[8px] font-sans font-bold uppercase tracking-widest text-red-400 ml-1">
+              Error
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
