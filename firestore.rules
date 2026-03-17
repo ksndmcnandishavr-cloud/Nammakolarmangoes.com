@@ -6,10 +6,16 @@ service cloud.firestore {
     // ===============================================================
     //
     // Collection: products
-    // Fields: name, variety, description, price, stock, available, image_url
+    // Fields: name, variety, price, description, image_url, available, stock
     //
     // Collection: orders
-    // Fields: customer_name, customer_email, address, phone, total, items, status, created_at, etc.
+    // Fields: customer_name, customer_email, address, phone, items, total, delivery_charge, promo_code, payment_id, payment_status, payment_method, paid_amount, status, created_at, uid
+    //
+    // Subcollection: products/{productId}/reviews
+    // Fields: product_id, name, rating, comment, created_at, uid
+    //
+    // Collection: testimonials
+    // Fields: name, rating, review, date, language, active
     //
     // Collection: offers
     // Fields: title, description, code, discount_percent, active, image_url
@@ -17,82 +23,96 @@ service cloud.firestore {
     // Collection: bookings
     // Fields: name, phone, date, time, guests, status, created_at
     //
-    // Collection: testimonials
-    // Fields: name, rating, review, date, language, active
-    //
-    // Collection: product_reviews
-    // Fields: product_id, name, rating, comment, created_at
-    //
     // ===============================================================
 
-    // ===============================================================
     // Helper Functions
-    // ===============================================================
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
     function isAdmin() {
-      return isAuthenticated() &&
+      return isAuthenticated() && 
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
          (request.auth.token.email == "ksndmc.nandishavr@gmail.com" && request.auth.token.email_verified == true));
     }
 
-    function isOwner(email) {
-      return isAuthenticated() && request.auth.token.email == email;
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
-
     function isValidProduct(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.variety is string && data.variety.size() < 50 &&
-             data.description is string && data.description.size() < 2000 &&
              data.price is number && data.price >= 0 &&
-             data.stock is number && data.stock >= 0 &&
-             (!('image_url' in data) || (data.image_url is string && data.image_url.size() < 500));
+             data.variety is string &&
+             data.available is int &&
+             data.stock is number;
     }
 
     function isValidOrder(data) {
-      return data.customer_name is string && data.customer_name.size() > 0 && data.customer_name.size() < 100 &&
-             isValidEmail(data.customer_email) &&
-             data.address is string && data.address.size() < 500 &&
-             data.phone is string && data.phone.size() < 20 &&
-             data.total is number && data.total >= 0 &&
-             data.items is list && data.items.size() > 0 && data.items.size() < 50;
+      return data.customer_email is string &&
+             data.items is list &&
+             data.total is number &&
+             data.status in ['pending', 'completed', 'cancelled'] &&
+             (data.uid == 'guest' || (isAuthenticated() && data.uid == request.auth.uid));
+    }
+
+    function isValidReview(data) {
+      return data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() > 0 && data.comment.size() < 1000 &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidTestimonial(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+             data.review is string && data.review.size() > 0 &&
+             data.date is string &&
+             data.language in ['en', 'kn'] &&
+             data.active is int;
+    }
+
+    function isValidOffer(data) {
+      return data.title is string && data.title.size() > 0 &&
+             data.description is string &&
+             data.code is string &&
+             data.discount_percent is number &&
+             data.active is int;
     }
 
     function isValidBooking(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.phone is string && data.phone.size() < 20 &&
-             data.date is string && data.date.size() < 20 &&
-             data.time is string && data.time.size() < 20 &&
-             data.guests is number && data.guests > 0 && data.guests < 100;
+      return data.name is string && data.name.size() > 0 &&
+             data.phone is string &&
+             data.date is string &&
+             data.time is string &&
+             data.guests is int &&
+             data.status in ['pending', 'confirmed', 'cancelled'] &&
+             data.created_at is string;
     }
 
-    // ===============================================================
     // Rules
-    // ===============================================================
-
-    match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow write: if isAdmin();
-    }
-
     match /products/{productId} {
-      allow read: if true; // Publicly readable
-      allow write: if isAdmin() && isValidProduct(request.resource.data);
-    }
-
-    match /offers/{offerId} {
       allow read: if true;
       allow write: if isAdmin();
+      
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if isAuthenticated() && isValidReview(request.resource.data);
+        allow update, delete: if isDocOwner() || isAdmin();
+      }
+    }
+
+    match /orders/{orderId} {
+      allow read: if (isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin())) || (resource.data.uid == 'guest' && isAdmin());
+      allow create: if isValidOrder(request.resource.data);
+      allow update: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
     }
 
     match /testimonials/{testimonialId} {
@@ -100,22 +120,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    match /product_reviews/{reviewId} {
+    match /offers/{offerId} {
       allow read: if true;
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
-    }
-
-    match /orders/{orderId} {
-      allow read: if isAdmin() || (isAuthenticated() && request.auth.token.email == resource.data.customer_email);
-      allow create: if isValidOrder(request.resource.data);
-      allow update: if isAdmin();
+      allow write: if isAdmin();
     }
 
     match /bookings/{bookingId} {
       allow read: if isAdmin();
       allow create: if isValidBooking(request.resource.data);
-      allow update: if isAdmin();
+      allow update, delete: if isAdmin();
     }
   }
 }
