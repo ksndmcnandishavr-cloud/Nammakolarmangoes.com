@@ -67,3 +67,15 @@
 .animate-marquee:hover {
   animation-play-state: paused;
 }
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-stone-100 rounded-full;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-stone-300 rounded-full hover:bg-brand-olive/30 transition-colors;
+}

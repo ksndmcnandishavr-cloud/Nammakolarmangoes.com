@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A mango variety available for purchase",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "variety": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" },
+        "available": { "type": "number" },
+        "image_url": { "type": "string" }
+      },
+      "required": ["name", "variety", "price", "stock"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order",
+      "type": "object",
+      "properties": {
+        "customer_name": { "type": "string" },
+        "customer_email": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "total": { "type": "number" },
+        "delivery_charge": { "type": "number" },
+        "promo_code": { "type": "string" },
+        "payment_id": { "type": "string" },
+        "payment_status": { "type": "string" },
+        "payment_method": { "type": "string" },
+        "paid_amount": { "type": "number" },
+        "status": { "type": "string" },
+        "tracking_id": { "type": "string" },
+        "estimated_delivery": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "product_id": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["customer_name", "customer_email", "total", "items"]
+    },
+    "Offer": {
+      "title": "Offer",
+      "description": "A promotional offer",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "code": { "type": "string" },
+        "discount_percent": { "type": "number" },
+        "active": { "type": "number" },
+        "image_url": { "type": "string" }
+      },
+      "required": ["title", "code", "discount_percent"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "A farm visit booking",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "guests": { "type": "number" },
+        "status": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone", "date", "time", "guests"]
+    },
+    "Testimonial": {
+      "title": "Testimonial",
+      "description": "A customer review of the farm",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "rating": { "type": "number" },
+        "review": { "type": "string" },
+        "date": { "type": "string" },
+        "language": { "type": "string" },
+        "active": { "type": "number" }
+      },
+      "required": ["name", "rating", "review"]
+    },
+    "ProductReview": {
+      "title": "ProductReview",
+      "description": "A review for a specific product",
+      "type": "object",
+      "properties": {
+        "product_id": { "type": "string" },
+        "name": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["product_id", "name", "rating", "comment"]
+    }
+  },
+  "firestore": {
+    "/products": { "schema": "Product", "description": "Mango products" },
+    "/orders": { "schema": "Order", "description": "Customer orders" },
+    "/offers": { "schema": "Offer", "description": "Promotional offers" },
+    "/bookings": { "schema": "Booking", "description": "Farm visit bookings" },
+    "/testimonials": { "schema": "Testimonial", "description": "Customer testimonials" },
+    "/product_reviews": { "schema": "ProductReview", "description": "Reviews for products" }
+  }
+}

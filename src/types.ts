@@ -47,3 +47,12 @@ export interface Testimonial {
   review: string;
   date: string;
 }
+
+export interface ProductReview {
+  id: number;
+  product_id: number | string;
+  name: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+}

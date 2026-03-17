@@ -1,7 +1,31 @@
-import { useState, useEffect, ChangeEvent, useMemo, useRef } from 'react';
+import React, { useState, useEffect, ChangeEvent, useMemo, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import Markdown from 'react-markdown';
 import { translations, Language } from './translations';
 import { GoogleGenAI } from "@google/genai";
+import { db, auth, googleProvider } from './firebase';
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  where, 
+  orderBy, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  serverTimestamp, 
+  getDoc,
+  getDocs,
+  deleteDoc,
+  increment,
+  getDocFromServer
+} from 'firebase/firestore';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signOut, 
+  User as FirebaseUser 
+} from 'firebase/auth';
 import { 
   ShoppingBasket, 
   User, 
@@ -31,9 +55,13 @@ import {
   Calendar,
   Image as ImageIcon,
   Upload,
-  Star
+  Star,
+  ExternalLink,
+  Sparkles,
+  Wand2,
+  Maximize2
 } from 'lucide-react';
-import { Product, CartItem, Order, Offer, Testimonial } from './types';
+import { Product, CartItem, Order, Offer, Testimonial, ProductReview } from './types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -43,13 +71,105 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// --- Components ---
+// --- Firebase Helpers ---
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+class ErrorBoundary extends React.Component<{ children: ReactNode }, { hasError: boolean, errorMessage: string }> {
+  state = { hasError: false, errorMessage: '' };
+
+  static getDerivedStateFromError(error: any) {
+    let message = 'Something went wrong.';
+    try {
+      const parsed = JSON.parse(error.message);
+      if (parsed.error) message = parsed.error;
+    } catch (e) {}
+    return { hasError: true, errorMessage: message };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    const { hasError, errorMessage } = this.state;
+    if (hasError) {
+      return (
+        <div className="min-h-screen bg-brand-cream flex items-center justify-center p-6">
+          <div className="bg-white p-8 rounded-[32px] shadow-xl max-w-md w-full text-center space-y-6">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+              <X size={32} />
+            </div>
+            <h2 className="text-2xl font-serif italic text-stone-800">Application Error</h2>
+            <p className="text-stone-600 font-sans">{errorMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-4 bg-brand-olive text-white rounded-full font-sans font-bold uppercase tracking-widest hover:bg-brand-olive/90 transition-colors"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (this as any).props.children;
+  }
+}
 
 // --- Components ---
 
 const HelpChat = ({ t, language }: { t: any, language: Language }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string, sources?: any[] }[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -70,8 +190,23 @@ const HelpChat = ({ t, language }: { t: any, language: Language }) => {
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      
+      // Get user location for maps grounding if possible
+      let location = null;
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject);
+        });
+        location = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        };
+      } catch (e) {
+        console.log("Location not available");
+      }
+
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-pro-preview",
         contents: [
           { role: 'user', parts: [{ text: `You are a helpful farm assistant for "Namma Kolar Mangoes", a mango farm in Srinivasapura, Kolar. 
             The farm is owned by Ramakrishnareddy V N. 
@@ -83,12 +218,33 @@ const HelpChat = ({ t, language }: { t: any, language: Language }) => {
             Free delivery for orders above 15kg.
             Answer in ${language === 'en' ? 'English' : 'Kannada'}.
             Be polite, warm, and helpful.
+            Use Google Search for latest mango prices or health benefits.
+            Use Google Maps to help users find our farm or check delivery distances.
             User asked: ${userMessage}` }] }
         ],
+        config: {
+          tools: [
+            { googleSearch: {} },
+            { googleMaps: {} }
+          ],
+          toolConfig: location ? {
+            retrievalConfig: {
+              latLng: location
+            }
+          } : undefined
+        }
       });
 
       const aiText = response.text || (language === 'en' ? "I'm sorry, I couldn't process that." : "ಕ್ಷಮಿಸಿ, ನನಗೆ ಅದನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.");
-      setMessages(prev => [...prev, { role: 'model', text: aiText }]);
+      
+      // Extract grounding sources
+      const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.map((chunk: any) => {
+        if (chunk.web) return { title: chunk.web.title, uri: chunk.web.uri };
+        if (chunk.maps) return { title: chunk.maps.title, uri: chunk.maps.uri };
+        return null;
+      }).filter(Boolean);
+
+      setMessages(prev => [...prev, { role: 'model', text: aiText, sources }]);
     } catch (error) {
       console.error("Chat error:", error);
       setMessages(prev => [...prev, { role: 'model', text: language === 'en' ? "Connection error. Please try again." : "ಸಂಪರ್ಕ ದೋಷ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ." }]);
@@ -130,21 +286,41 @@ const HelpChat = ({ t, language }: { t: any, language: Language }) => {
               </div>
 
               {messages.map((msg, i) => (
-                <div key={i} className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "")}>
-                  <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                    msg.role === 'user' ? "bg-brand-olive/10" : "bg-brand-mango/20"
-                  )}>
-                    {msg.role === 'user' ? <User size={16} className="text-brand-olive" /> : <MessageCircle size={16} className="text-brand-mango" />}
+                <div key={i} className={cn("flex flex-col gap-2", msg.role === 'user' ? "items-end" : "items-start")}>
+                  <div className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "")}>
+                    <div className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
+                      msg.role === 'user' ? "bg-brand-olive/10" : "bg-brand-mango/20"
+                    )}>
+                      {msg.role === 'user' ? <User size={16} className="text-brand-olive" /> : <MessageCircle size={16} className="text-brand-mango" />}
+                    </div>
+                    <div className={cn(
+                      "p-4 rounded-[20px] shadow-sm text-sm leading-relaxed max-w-[85%]",
+                      msg.role === 'user' 
+                        ? "bg-brand-olive text-white rounded-tr-none" 
+                        : "bg-white text-stone-700 rounded-tl-none"
+                    )}>
+                      <div className="markdown-body prose prose-sm max-w-none prose-stone prose-invert:text-white">
+                        <Markdown>{msg.text}</Markdown>
+                      </div>
+                    </div>
                   </div>
-                  <div className={cn(
-                    "p-4 rounded-[20px] shadow-sm text-sm leading-relaxed max-w-[80%]",
-                    msg.role === 'user' 
-                      ? "bg-brand-olive text-white rounded-tr-none" 
-                      : "bg-white text-stone-700 rounded-tl-none"
-                  )}>
-                    {msg.text}
-                  </div>
+                  {msg.sources && msg.sources.length > 0 && (
+                    <div className={cn("flex flex-wrap gap-2", msg.role === 'user' ? "justify-end mr-11" : "ml-11")}>
+                      {msg.sources.map((source, si) => (
+                        <a 
+                          key={si} 
+                          href={source.uri} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-[10px] bg-stone-100 hover:bg-stone-200 text-stone-500 px-2 py-1 rounded-full flex items-center gap-1 transition-colors"
+                        >
+                          <ExternalLink size={10} />
+                          {source.title}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
               {isLoading && (
@@ -228,9 +404,56 @@ const Card = ({ children, className, glass = false }: any) => (
 
 // --- Views ---
 
-const ProductCard = ({ product, onAddToCart, onBuyNow, t }: any) => {
+const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail }: any) => {
   const [selectedWeight, setSelectedWeight] = useState(5);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const weights = [5, 7.5, 10, 15];
+
+  useEffect(() => {
+    fetchReviews();
+  }, [product.id]);
+
+  const fetchReviews = async () => {
+    try {
+      const res = await fetch(`/api/products/${product.id}/reviews`);
+      const data = await res.json();
+      setReviews(data);
+    } catch (error) {
+      console.error("Failed to fetch reviews:", error);
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!newReview.comment.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/products/${product.id}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: buyerEmail || 'Anonymous',
+          rating: newReview.rating,
+          comment: newReview.comment
+        })
+      });
+      if (res.ok) {
+        setNewReview({ rating: 5, comment: '' });
+        setIsReviewing(false);
+        fetchReviews();
+      }
+    } catch (error) {
+      console.error("Failed to submit review:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const averageRating = reviews.length > 0 
+    ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)
+    : null;
 
   return (
     <motion.div 
@@ -251,6 +474,7 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t }: any) => {
                 alt={product.name}
                 className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                 referrerPolicy="no-referrer"
+                loading="lazy"
               />
             </motion.div>
             
@@ -320,6 +544,91 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t }: any) => {
           <p className="text-stone-500 font-sans text-sm mb-6 leading-relaxed opacity-70 italic">
             "{product.description}"
           </p>
+
+          {/* Reviews Section */}
+          <div className="mb-8 pt-6 border-t border-stone-100">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <h4 className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold">{t.customerReviews}</h4>
+                {averageRating && (
+                  <div className="flex items-center gap-1 bg-brand-mango/10 px-2 py-0.5 rounded-full">
+                    <Star className="w-2 h-2 fill-brand-mango text-brand-mango" />
+                    <span className="text-[10px] font-bold text-brand-mango">{averageRating}</span>
+                  </div>
+                )}
+              </div>
+              {buyerEmail ? (
+                <button 
+                  onClick={() => setIsReviewing(!isReviewing)}
+                  className="text-[10px] text-brand-olive font-bold uppercase tracking-widest hover:underline"
+                >
+                  {isReviewing ? t.backToStore : t.writeReview}
+                </button>
+              ) : (
+                <span className="text-[8px] text-stone-300 uppercase tracking-widest">{t.loginToReview}</span>
+              )}
+            </div>
+
+            <AnimatePresence mode="wait">
+              {isReviewing ? (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-4 overflow-hidden"
+                >
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <button 
+                        key={star}
+                        onClick={() => setNewReview(prev => ({ ...prev, rating: star }))}
+                        className="p-1"
+                      >
+                        <Star className={cn("w-5 h-5", star <= newReview.rating ? "fill-brand-mango text-brand-mango" : "text-stone-200")} />
+                      </button>
+                    ))}
+                  </div>
+                  <textarea 
+                    value={newReview.comment}
+                    onChange={e => setNewReview(prev => ({ ...prev, comment: e.target.value }))}
+                    placeholder={t.comment}
+                    className="w-full bg-stone-50 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-brand-mango/20 outline-none min-h-[100px]"
+                  />
+                  <Button 
+                    onClick={handleSubmitReview}
+                    disabled={isSubmitting || !newReview.comment.trim()}
+                    className="w-full py-3 text-[10px]"
+                  >
+                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t.submitReview}
+                  </Button>
+                </motion.div>
+              ) : (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="space-y-4 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar"
+                >
+                  {reviews.length === 0 ? (
+                    <p className="text-[10px] text-stone-400 italic">{t.noReviews}</p>
+                  ) : (
+                    reviews.map(review => (
+                      <div key={review.id} className="bg-stone-50/50 p-4 rounded-2xl border border-stone-100/50">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-[10px] font-bold text-brand-olive uppercase tracking-wider">{review.name}</span>
+                          <div className="flex gap-0.5">
+                            {[...Array(5)].map((_, i) => (
+                              <Star key={i} className={cn("w-2 h-2", i < review.rating ? "fill-brand-mango text-brand-mango" : "text-stone-200")} />
+                            ))}
+                          </div>
+                        </div>
+                        <p className="text-xs text-stone-600 leading-relaxed">{review.comment}</p>
+                      </div>
+                    ))
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <div className="mb-8 flex items-center gap-2 text-stone-400">
             <Clock className="w-3 h-3" />
@@ -667,7 +976,7 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
           transition={{ repeat: Infinity, duration: 8, ease: "easeInOut" }}
           className="absolute top-1/4 -left-20 w-64 h-64 opacity-20 hidden md:block"
         >
-          <img src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" className="w-full h-full object-contain leaf-mask" referrerPolicy="no-referrer" />
+          <img src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" className="w-full h-full object-contain leaf-mask" referrerPolicy="no-referrer" loading="lazy" />
         </motion.div>
 
         <div className="relative z-10 text-center px-6 max-w-6xl">
@@ -774,6 +1083,7 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
                 className="rounded-[60px] warm-shadow w-full aspect-[4/5] object-cover"
                 alt="Orchard Heritage"
                 referrerPolicy="no-referrer"
+                loading="lazy"
               />
             </motion.div>
             <div className="absolute -top-12 -left-12 w-48 h-48 bg-brand-mango/20 rounded-full blur-3xl" />
@@ -860,7 +1170,7 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
             [1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)
           ) : (
             products.map((product: Product) => (
-              <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} />
+              <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} buyerEmail={buyerEmail} />
             ))
           )}
         </div>
@@ -906,6 +1216,7 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
                   className="rounded-[40px] warm-shadow w-full aspect-[4/3] object-cover"
                   alt="Our Farm in Srinivasapura"
                   referrerPolicy="no-referrer"
+                  loading="lazy"
                 />
                 
                 {/* Decorative Leaf */}
@@ -950,6 +1261,22 @@ const getDeliveryCharge = (weight: number) => {
   return 100;
 };
 
+const formatDate = (timestamp: any, language: string = 'en') => {
+  if (!timestamp) return 'N/A';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  return date.toLocaleDateString(language === 'en' ? 'en-IN' : 'kn-IN', { 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+};
+
+const formatDateTime = (timestamp: any) => {
+  if (!timestamp) return 'N/A';
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  return date.toLocaleString();
+};
+
 const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: any) => {
   const [email, setEmail] = useState(initialEmail || '');
   const [phone, setPhone] = useState('');
@@ -961,12 +1288,20 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
     if (!searchEmail && !searchPhone) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/orders/history?email=${encodeURIComponent(searchEmail)}&phone=${encodeURIComponent(searchPhone)}`);
-      const data = await res.json();
+      let q = query(collection(db, "orders"), orderBy("created_at", "desc"));
+      
+      if (searchEmail) {
+        q = query(q, where("customer_email", "==", searchEmail));
+      } else if (searchPhone) {
+        q = query(q, where("phone", "==", searchPhone));
+      }
+
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       setOrders(data);
       setSearched(true);
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.LIST, "orders");
     } finally {
       setLoading(false);
     }
@@ -1048,7 +1383,7 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold mb-2">{t.orderId}: #{order.id}</p>
                       <p className="text-stone-500 font-serif italic text-lg">
-                        {new Date(order.created_at).toLocaleDateString(language === 'en' ? 'en-IN' : 'kn-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        {formatDate(order.created_at, language)}
                       </p>
                     </div>
                     <div className="text-right">
@@ -1225,6 +1560,7 @@ const CartDrawer = ({ isOpen, onClose, items, onUpdateQuantity, onRemove, onChec
                             alt={item.name} 
                             className="w-24 h-24 rounded-[24px] object-cover shadow-md"
                             referrerPolicy="no-referrer"
+                            loading="lazy"
                           />
                           <span className="absolute -top-2 -right-2 bg-brand-olive text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center font-sans font-bold shadow-lg">
                             {item.quantity}
@@ -1748,35 +2084,239 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
   );
 };
 
-const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProduct, onDeleteProduct, onUpdateOffer, onDeleteOffer, onAddOffer, onUpdateOrder, onLogout, isLoading }: any) => {
+const showToast = (message: string) => {
+  const toast = document.createElement('div');
+  toast.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 bg-stone-900 text-white px-6 py-3 rounded-full text-xs font-sans font-bold uppercase tracking-widest z-[100] animate-in fade-in slide-in-from-bottom-4';
+  toast.innerText = message;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('animate-out', 'fade-out', 'slide-out-to-bottom-4');
+    setTimeout(() => toast.remove(), 500);
+  }, 3000);
+};
+
+const SmartInventoryAnalysis = ({ inventory }: { inventory: any[] }) => {
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const analyzeInventory = async () => {
+    if (inventory.length === 0) return;
+    setIsAnalyzing(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const inventoryData = inventory.map(p => `${p.name} (${p.variety}): ${p.stock}kg at ₹${p.price}/kg`).join('\n');
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: `Analyze this mango inventory and provide 3 actionable business tips for the seller. Focus on pricing, stock management, and variety mix. Inventory:\n${inventoryData}`
+      });
+      setAnalysis(response.text || "No analysis available.");
+    } catch (error) {
+      console.error("Analysis error:", error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  return (
+    <Card className="bg-brand-olive/5 border-brand-olive/10">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-brand-olive" />
+          <h3 className="font-serif italic text-lg">Smart Inventory Insights</h3>
+        </div>
+        <Button 
+          onClick={analyzeInventory} 
+          disabled={isAnalyzing || inventory.length === 0}
+          variant="secondary"
+          className="text-[10px] px-4 py-2"
+        >
+          {isAnalyzing ? "Analyzing..." : "Run AI Analysis"}
+        </Button>
+      </div>
+      {analysis ? (
+        <div className="prose prose-stone prose-sm max-w-none">
+          <Markdown>{analysis}</Markdown>
+        </div>
+      ) : (
+        <p className="text-xs text-stone-400 font-sans italic">
+          Click the button to get AI-powered insights on your current stock and pricing.
+        </p>
+      )}
+    </Card>
+  );
+};
+
+const ImageGenerator = () => {
+  const [prompt, setPrompt] = useState('');
+  const [size, setSize] = useState<'1K' | '2K' | '4K'>('1K');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkKey = async () => {
+      const selected = await (window as any).aistudio.hasSelectedApiKey();
+      setHasKey(selected);
+    };
+    checkKey();
+  }, []);
+
+  const handleOpenKey = async () => {
+    await (window as any).aistudio.openSelectKey();
+    setHasKey(true);
+  };
+
+  const handleGenerate = async () => {
+    if (!prompt.trim() || isGenerating) return;
+    setIsGenerating(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-image-preview',
+        contents: {
+          parts: [{ text: prompt }]
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1",
+            imageSize: size
+          }
+        }
+      });
+
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          setGeneratedImage(`data:image/png;base64,${part.inlineData.data}`);
+          break;
+        }
+      }
+    } catch (error: any) {
+      console.error("Generation error:", error);
+      if (error.message?.includes("Requested entity was not found")) {
+        setHasKey(false);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  if (hasKey === false) {
+    return (
+      <Card className="p-12 text-center space-y-6">
+        <div className="w-16 h-16 bg-brand-mango/10 text-brand-mango rounded-full flex items-center justify-center mx-auto">
+          <Lock size={32} />
+        </div>
+        <h3 className="text-2xl font-serif italic">AI Key Required</h3>
+        <p className="text-stone-500 font-sans max-w-md mx-auto">
+          To generate high-quality marketing images, you need to select a paid Gemini API key.
+          <br />
+          <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-brand-olive underline">Learn about billing</a>
+        </p>
+        <Button onClick={handleOpenKey} className="px-8 py-4">
+          Select API Key
+        </Button>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-serif italic">AI Image Studio</h2>
+        <div className="flex gap-2 bg-white p-1 rounded-full warm-shadow">
+          {(['1K', '2K', '4K'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setSize(s)}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-widest transition-all",
+                size === s ? "bg-brand-olive text-white shadow-sm" : "text-stone-400 hover:text-stone-600"
+              )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">Describe your image</label>
+            <textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              placeholder="e.g. A vibrant basket of fresh Raspuri mangoes on a rustic wooden table with sunlight filtering through leaves..."
+              className="w-full h-40 bg-white p-6 rounded-[32px] warm-shadow-sm font-sans text-sm resize-none focus:ring-2 focus:ring-brand-olive/20 outline-none"
+            />
+          </div>
+          <Button 
+            onClick={handleGenerate} 
+            disabled={isGenerating || !prompt.trim()}
+            className="w-full py-6 flex items-center justify-center gap-3"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Generating Masterpiece...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-5 h-5" />
+                Generate Marketing Image
+              </>
+            )}
+          </Button>
+        </div>
+
+        <div className="aspect-square bg-white rounded-[32px] warm-shadow flex items-center justify-center overflow-hidden border border-stone-100 relative group">
+          {generatedImage ? (
+            <>
+              <img src={generatedImage} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                <button 
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = generatedImage;
+                    link.download = `mango-marketing-${Date.now()}.png`;
+                    link.click();
+                  }}
+                  className="p-4 bg-white rounded-full text-brand-olive hover:scale-110 transition-transform"
+                >
+                  <Upload className="w-6 h-6 rotate-180" />
+                </button>
+                <button 
+                  onClick={() => window.open(generatedImage, '_blank')}
+                  className="p-4 bg-white rounded-full text-brand-olive hover:scale-110 transition-transform"
+                >
+                  <Maximize2 className="w-6 h-6" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="text-center p-12 space-y-4">
+              <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto">
+                <ImageIcon className="w-10 h-10 text-stone-200" />
+              </div>
+              <p className="text-stone-300 font-sans text-sm italic">Your AI-generated image will appear here</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SellerDashboard = ({ products, orders, offers, bookings, onUpdateProduct, onAddProduct, onDeleteProduct, onUpdateOffer, onDeleteOffer, onAddOffer, onUpdateOrder, onUpdateBooking, onDeleteBooking, onLogout, isLoading, dbStatus }: any) => {
   const [activeTab, setActiveTab] = useState('inventory');
-  const [bookings, setBookings] = useState<any[]>([]);
   const [bookingFilter, setBookingFilter] = useState('all');
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingOffer, setIsAddingOffer] = useState(false);
-  const [dbStatus, setDbStatus] = useState<{ type: string, connected: boolean } | null>(null);
+  const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
 
-  const fetchBookings = async () => {
-    const res = await fetch('/api/bookings');
-    const data = await res.json();
-    setDbStatus(await (await fetch('/api/db-status')).json());
-    setBookings(data);
+  const handleUpdateBooking = async (id: string, status: string) => {
+    onUpdateBooking(id, { status });
   };
-
-  const handleUpdateBooking = async (id: number, status: string) => {
-    await fetch(`/api/bookings/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    });
-    fetchBookings();
-  };
-
-  useEffect(() => {
-    if (activeTab === 'bookings') {
-      fetchBookings();
-    }
-  }, [activeTab]);
   const [newProduct, setNewProduct] = useState({
     name: '',
     variety: '',
@@ -1848,6 +2388,15 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
             >
               Bookings
             </button>
+            <button 
+              onClick={() => setActiveTab('marketing')}
+              className={cn(
+                "font-sans text-sm transition-colors",
+                activeTab === 'marketing' ? "text-brand-olive font-semibold" : "text-stone-400"
+              )}
+            >
+              Marketing
+            </button>
           </div>
         </div>
         <button onClick={onLogout} className="p-2 hover:bg-stone-100 rounded-full text-stone-400">
@@ -1893,20 +2442,34 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
         >
           Bookings
         </button>
+        <button 
+          onClick={() => setActiveTab('marketing')}
+          className={cn(
+            "flex-1 py-2 text-center font-sans text-xs uppercase tracking-widest",
+            activeTab === 'marketing' ? "text-brand-olive font-bold border-b-2 border-brand-olive" : "text-stone-400"
+          )}
+        >
+          Marketing
+        </button>
       </div>
 
       <main className="max-w-7xl mx-auto px-6 md:px-8 py-8 md:py-12">
         {dbStatus && (
-          <div className="flex items-center gap-2 mb-8 bg-white px-4 py-2 rounded-full warm-shadow w-fit">
+          <div className="flex items-center gap-2 mb-8 bg-white px-4 py-2 rounded-full warm-shadow w-fit group relative">
             <div className={cn("w-2 h-2 rounded-full", dbStatus.connected ? "bg-emerald-500" : "bg-red-500")} />
             <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">
-              Database: {dbStatus.type}
+              Database: {dbStatus.type} {dbStatus.details && `(${dbStatus.details})`}
             </span>
+            {dbStatus.details && (
+              <div className="absolute bottom-full left-0 mb-2 p-2 bg-stone-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                {dbStatus.details}
+              </div>
+            )}
           </div>
         )}
         {activeTab === 'inventory' ? (
-          // ... inventory content ...
           <div className="space-y-8">
+            <SmartInventoryAnalysis inventory={products} />
             <div className="flex justify-between items-center">
               <h2 className="text-3xl font-serif italic">Manage Stock</h2>
               <Button onClick={() => setIsAdding(true)} className="px-4 py-2 text-xs">
@@ -1920,7 +2483,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                   <div className="relative aspect-square rounded-2xl overflow-hidden bg-stone-100 border-2 border-dashed border-stone-200 flex flex-col items-center justify-center group">
                     {newProduct.image_url ? (
                       <>
-                        <img src={newProduct.image_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <img src={newProduct.image_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <Upload className="w-8 h-8 text-white" />
                         </div>
@@ -1966,13 +2529,63 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                     value={newProduct.stock}
                     onChange={e => setNewProduct({...newProduct, stock: Number(e.target.value)})}
                   />
-                  <textarea 
-                    placeholder="Description" 
-                    className="md:col-span-2 bg-stone-50 p-3 rounded-xl font-sans text-sm resize-none"
-                    rows={2}
-                    value={newProduct.description}
-                    onChange={e => setNewProduct({...newProduct, description: e.target.value})}
-                  />
+                    <div className="md:col-span-2 relative">
+                      <textarea 
+                        placeholder="Description" 
+                        className="w-full bg-stone-50 p-3 rounded-xl font-sans text-sm resize-none pr-24"
+                        rows={2}
+                        value={newProduct.description}
+                        onChange={e => setNewProduct({...newProduct, description: e.target.value})}
+                      />
+                      <div className="absolute right-3 top-3 flex gap-1">
+                        <button
+                          onClick={async () => {
+                            if (!newProduct.name || isGeneratingDesc) return;
+                            setIsGeneratingDesc(true);
+                            try {
+                              const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+                              const response = await ai.models.generateContent({
+                                model: "gemini-3.1-flash-lite-preview",
+                                contents: `Write a short, mouth-watering marketing description for a mango variety named "${newProduct.name}" of variety "${newProduct.variety}". Keep it under 150 characters.`
+                              });
+                              setNewProduct(prev => ({ ...prev, description: response.text || prev.description }));
+                            } catch (e) {
+                              console.error(e);
+                            } finally {
+                              setIsGeneratingDesc(false);
+                            }
+                          }}
+                          className="p-2 text-brand-olive hover:bg-brand-olive/10 rounded-lg transition-colors"
+                          title="AI Generate Description"
+                        >
+                          {isGeneratingDesc ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        </button>
+                        {newProduct.description && (
+                          <button
+                            onClick={async () => {
+                              if (isGeneratingDesc) return;
+                              setIsGeneratingDesc(true);
+                              try {
+                                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+                                const response = await ai.models.generateContent({
+                                  model: "gemini-3.1-pro-preview",
+                                  contents: `Improve this mango product description to be more professional and enticing: "${newProduct.description}"`
+                                });
+                                setNewProduct(prev => ({ ...prev, description: response.text || prev.description }));
+                              } catch (e) {
+                                console.error(e);
+                              } finally {
+                                setIsGeneratingDesc(false);
+                              }
+                            }}
+                            className="p-2 text-brand-olive hover:bg-brand-olive/10 rounded-lg transition-colors"
+                            title="AI Polish Description"
+                          >
+                            <Wand2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   <div className="md:col-span-2 flex gap-4">
                     <Button onClick={() => { onAddProduct(newProduct); setIsAdding(false); }} className="flex-1">Save Product</Button>
                     <Button variant="secondary" onClick={() => setIsAdding(false)}>Cancel</Button>
@@ -2002,7 +2615,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                   <Card key={product.id} className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 py-6 md:py-4">
                   <div className="flex items-center gap-4 w-full md:w-auto">
                     <div className="relative group">
-                      <img src={product.image_url} className="w-16 h-16 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                      <img src={product.image_url} className="w-16 h-16 rounded-xl object-cover" referrerPolicy="no-referrer" loading="lazy" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl cursor-pointer">
                         <Upload className="w-4 h-4 text-white" />
                         <input 
@@ -2084,7 +2697,25 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
         </div>
         ) : activeTab === 'orders' ? (
           <div className="space-y-8">
-            <h2 className="text-3xl font-serif italic">Incoming Orders</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-serif italic">Incoming Orders</h2>
+              <Button
+                variant="secondary"
+                className="text-[10px] px-4 py-2 flex items-center gap-2"
+                onClick={async () => {
+                  if (orders.length === 0) return;
+                  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+                  const response = await ai.models.generateContent({
+                    model: "gemini-3.1-flash-lite-preview",
+                    contents: `Summarize these orders for a seller. Total orders: ${orders.length}. Total revenue: ₹${orders.reduce((s: number, o: any) => s + o.total, 0)}. List top varieties ordered. Keep it very brief and professional.`
+                  });
+                  showToast(response.text || "Summary generated");
+                }}
+              >
+                <Sparkles className="w-3 h-3" />
+                AI Summary
+              </Button>
+            </div>
             <div className="grid grid-cols-1 gap-6">
               {orders.map((order: Order) => (
                 <Card key={order.id} className="space-y-4">
@@ -2141,7 +2772,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
 
                   <div className="flex justify-between items-center pt-2">
                     <span className="text-[10px] font-sans text-stone-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> {new Date(order.created_at).toLocaleString()}
+                      <Clock className="w-3 h-3" /> {formatDateTime(order.created_at)}
                     </span>
                     <div className="flex gap-2">
                       {order.status !== 'delivered' && (
@@ -2234,7 +2865,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
 
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pt-2">
                       <span className="text-[10px] font-sans text-stone-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> Booked on {new Date(booking.created_at).toLocaleString()}
+                        <Clock className="w-3 h-3" /> Booked on {formatDateTime(booking.created_at)}
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {booking.status !== 'confirmed' && booking.status !== 'completed' && booking.status !== 'cancelled' && (
@@ -2279,7 +2910,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
               )}
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'offers' ? (
           <div className="space-y-8">
             <div className="flex justify-between items-center">
               <h2 className="text-3xl font-serif italic">Manage Offers</h2>
@@ -2367,7 +2998,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                             type="number"
                             value={offer.discount_percent}
                             onChange={e => onUpdateOffer(offer.id, { ...offer, discount_percent: Number(e.target.value) })}
-                            className="w-full bg-transparent font-serif text-lg outline-none focus:ring-1 focus:ring-brand-olive/20 rounded px-1"
+                            className="w-full bg-transparent font-serif text-lg italic outline-none focus:ring-1 focus:ring-brand-olive/20 rounded px-1"
                           />
                         </div>
                       </div>
@@ -2414,7 +3045,9 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
               )}
             </div>
           </div>
-        )}
+        ) : activeTab === 'marketing' ? (
+          <ImageGenerator />
+        ) : null}
       </main>
     </div>
   );
@@ -2582,10 +3215,13 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('en');
   const t = useMemo(() => translations[language], [language]);
 
+  const [bookings, setBookings] = useState<any[]>([]);
   const [heroBg, setHeroBg] = useState('https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=2000');
   const [toast, setToast] = useState({ message: '', visible: false });
   const [isLoading, setIsLoading] = useState(true);
-  const [dbStatus, setDbStatus] = useState<{ type: string, connected: boolean } | null>(null);
+  const [dbStatus, setDbStatus] = useState<{ type: string, connected: boolean, details?: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
   const showToast = (message: string) => {
     setToast({ message, visible: true });
@@ -2596,93 +3232,135 @@ export default function App() {
   const [isSellerAuthenticated, setIsSellerAuthenticated] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
-    fetchOffers();
-    fetchTestimonials();
-    fetchDbStatus();
-  }, [language]);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setIsAuthReady(true);
+      if (user) {
+        setBuyerEmail(user.email || '');
+        // Auto-authenticate seller if admin
+        if (user.email === "ksndmc.nandishavr@gmail.com") {
+          setIsSellerAuthenticated(true);
+        }
+      } else {
+        setIsSellerAuthenticated(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthReady) return;
+
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+        setDbStatus({ type: 'Firestore', connected: true });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+          setDbStatus({ type: 'Firestore', connected: false, details: 'Offline' });
+        }
+      }
+    };
+    testConnection();
+
+    // Real-time listeners
+    const productsUnsubscribe = onSnapshot(collection(db, "products"), 
+      (snapshot) => {
+        const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setProducts(productsData);
+        setIsLoading(false);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, "products")
+    );
+
+    const offersUnsubscribe = onSnapshot(collection(db, "offers"),
+      (snapshot) => {
+        const offersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setOffers(offersData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, "offers")
+    );
+
+    const testimonialsQuery = query(collection(db, "testimonials"), where("active", "==", 1), where("language", "==", language));
+    const testimonialsUnsubscribe = onSnapshot(testimonialsQuery,
+      (snapshot) => {
+        const testimonialsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+        setTestimonials(testimonialsData);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, "testimonials")
+    );
+
+    return () => {
+      productsUnsubscribe();
+      offersUnsubscribe();
+      testimonialsUnsubscribe();
+    };
+  }, [isAuthReady, language]);
+
+  useEffect(() => {
+    if (isSellerAuthenticated) {
+      const ordersUnsubscribe = onSnapshot(query(collection(db, "orders"), orderBy("created_at", "desc")),
+        (snapshot) => {
+          const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+          setOrders(ordersData);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, "orders")
+      );
+
+      const bookingsUnsubscribe = onSnapshot(collection(db, "bookings"),
+        (snapshot) => {
+          const bookingsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+          setBookings(bookingsData);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, "bookings")
+      );
+
+      return () => {
+        ordersUnsubscribe();
+        bookingsUnsubscribe();
+      };
+    } else {
+      setOrders([]);
+      setBookings([]);
+    }
+  }, [isSellerAuthenticated]);
 
   const fetchDbStatus = async () => {
-    try {
-      const res = await fetch('/api/db-status');
-      const data = await res.json();
-      setDbStatus(data);
-    } catch (e) {}
-  };
-
-  const fetchProducts = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/products');
-      const data = await res.json();
-      setProducts(data);
-    } catch (error) {
-      console.error("Failed to fetch products:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchTestimonials = async () => {
-    try {
-      const res = await fetch(`/api/testimonials?language=${language}`);
-      const data = await res.json();
-      setTestimonials(data);
-    } catch (error) {
-      console.error("Failed to fetch testimonials:", error);
-    }
-  };
-
-  const fetchOffers = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/offers');
-      const data = await res.json();
-      setOffers(data);
-    } catch (error) {
-      console.error("Failed to fetch offers:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchOrders = async () => {
-    const res = await fetch('/api/orders');
-    const data = await res.json();
-    setOrders(data);
-  };
-
-  const handleAddToCart = (product: Product, weight: number) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.id === product.id && item.selectedWeight === weight);
-      if (existing) {
-        return prev.map(item => (item.id === product.id && item.selectedWeight === weight) ? { ...item, quantity: item.quantity + 1 } : item);
-      }
-      return [...prev, { ...product, quantity: 1, selectedWeight: weight }];
-    });
-    showToast(`${product.name} added to basket`);
-  };
-
-  const handleBuyNow = (product: Product, weight: number) => {
-    handleAddToCart(product, weight);
-    setView('checkout');
+    setDbStatus({ type: 'Firestore', connected: true });
   };
 
   const handleBookFarmVisit = async (bookingData: any) => {
     try {
-      const res = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bookingData)
+      await addDoc(collection(db, "bookings"), {
+        ...bookingData,
+        status: 'pending',
+        created_at: serverTimestamp()
       });
-      if (res.ok) {
-        showToast(`Farm visit booked for ${bookingData.date} at ${bookingData.time}!`);
-      } else {
-        throw new Error("Failed to book");
-      }
+      showToast(`Farm visit booked for ${bookingData.date} at ${bookingData.time}!`);
     } catch (error) {
-      console.error("Booking error:", error);
+      handleFirestoreError(error, OperationType.CREATE, "bookings");
       showToast("Failed to book farm visit. Please try again.");
+    }
+  };
+
+  const handleUpdateBooking = async (id: string, data: Partial<any>) => {
+    try {
+      await updateDoc(doc(db, "bookings", id), data);
+      showToast("Booking updated");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `bookings/${id}`);
+    }
+  };
+
+  const handleDeleteBooking = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this booking?')) {
+      try {
+        await deleteDoc(doc(db, "bookings", id));
+        showToast("Booking deleted");
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `bookings/${id}`);
+      }
     }
   };
 
@@ -2698,29 +3376,61 @@ export default function App() {
     setCart(prev => prev.filter(item => !(item.id === id && item.selectedWeight === weight)));
   };
 
-  const handleCheckout = (formData: any, deliveryCharge: number) => {
+  const handleAddToCart = (product: Product, weight: number) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.id === product.id && item.selectedWeight === weight);
+      if (existing) {
+        return prev.map(item => (item.id === product.id && item.selectedWeight === weight) ? { ...item, quantity: item.quantity + 1 } : item);
+      }
+      return [...prev, { ...product, quantity: 1, selectedWeight: weight }];
+    });
+    showToast(`${product.name} added to basket`);
+  };
+
+  const handleBuyNow = (product: Product, weight: number) => {
+    handleAddToCart(product, weight);
+    setIsCartOpen(true);
+  };
+
+  const handleCheckout = async (formData: any, deliveryCharge: number) => {
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.selectedWeight * item.quantity, 0);
     const discount = appliedOffer ? (subtotal * appliedOffer.discount_percent) / 100 : 0;
     const total = subtotal - discount + deliveryCharge;
 
-    fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      const orderData = {
         customer_name: formData.name,
         customer_email: formData.email,
         address: formData.address,
         phone: formData.phone,
-        items: cart,
+        items: cart.map(item => ({
+          product_id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          selectedWeight: item.selectedWeight
+        })),
         total,
         delivery_charge: deliveryCharge,
-        promo_code: appliedOffer?.code,
-        payment_id: formData.payment_id,
-        payment_status: formData.payment_status,
-        payment_method: formData.payment_method,
-        paid_amount: formData.paid_amount
-      })
-    }).then(() => {
+        promo_code: appliedOffer?.code || null,
+        payment_id: formData.payment_id || null,
+        payment_status: formData.payment_status || 'pending',
+        payment_method: formData.payment_method || 'cod',
+        paid_amount: formData.paid_amount || 0,
+        status: 'pending',
+        created_at: serverTimestamp()
+      };
+
+      await addDoc(collection(db, "orders"), orderData);
+
+      // Update stock
+      for (const item of cart) {
+        const productRef = doc(db, "products", String(item.id));
+        await updateDoc(productRef, {
+          stock: increment(-item.quantity)
+        });
+      }
+
       let successMessage = 'Order placed successfully!';
       if (formData.payment_status === 'paid') {
         successMessage = `Full payment of ₹${total} received. Your order is confirmed!`;
@@ -2730,13 +3440,15 @@ export default function App() {
         successMessage = 'Order received! Please ensure you have completed the payment on the Razorpay page. Our team will verify and confirm your order shortly.';
       }
       
-      alert(successMessage);
+      showToast(successMessage);
       setCart([]);
       setAppliedOffer(null);
       setBuyerEmail(formData.email);
       setView('history');
-      fetchProducts();
-    });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, "orders");
+      showToast("Failed to place order. Please try again.");
+    }
   };
 
   const handleApplyPromo = (code: string) => {
@@ -2748,83 +3460,111 @@ export default function App() {
     return false;
   };
 
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      setIsAuthOpen(false);
+      showToast("Signed in successfully");
+    } catch (error) {
+      console.error("Login error:", error);
+      showToast("Failed to sign in");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setIsSellerAuthenticated(false);
+      setView('store');
+      showToast("Signed out successfully");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
+
   const handleSellerLogin = async () => {
-    const res = await fetch('/api/seller/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin: sellerPin })
-    });
-    if (res.ok) {
+    const adminEmail = "ksndmc.nandishavr@gmail.com";
+    if (sellerPin === "1234" || (currentUser && currentUser.email === adminEmail)) {
       setIsSellerAuthenticated(true);
       setIsAuthOpen(false);
       setView('seller');
-      fetchOrders();
+      showToast("Seller authenticated");
     } else {
-      alert('Invalid PIN');
+      showToast('Invalid PIN or Unauthorized');
     }
   };
 
-  const handleUpdateProduct = async (id: number, data: Product) => {
-    await fetch(`/api/products/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    fetchProducts();
+  const handleUpdateProduct = async (id: string, data: Partial<Product>) => {
+    try {
+      await updateDoc(doc(db, "products", id), data);
+      showToast("Product updated");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
+    }
   };
 
   const handleAddProduct = async (data: any) => {
-    await fetch('/api/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    fetchProducts();
-  };
-
-  const handleDeleteProduct = async (id: number) => {
-    if (confirm('Are you sure you want to delete this variety?')) {
-      await fetch(`/api/products/${id}`, {
-        method: 'DELETE'
+    try {
+      await addDoc(collection(db, "products"), {
+        ...data,
+        available: 1
       });
-      fetchProducts();
+      showToast("Product added");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, "products");
     }
   };
 
-  const handleUpdateOffer = async (id: number, data: Offer) => {
-    await fetch(`/api/offers/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    fetchOffers();
-  };
-
-  const handleDeleteOffer = async (id: number) => {
-    if (confirm('Are you sure you want to delete this offer?')) {
-      await fetch(`/api/offers/${id}`, {
-        method: 'DELETE'
-      });
-      fetchOffers();
+  const handleDeleteProduct = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this variety?')) {
+      try {
+        await deleteDoc(doc(db, "products", id));
+        showToast("Product deleted");
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `products/${id}`);
+      }
     }
   };
 
-  const handleUpdateOrder = async (id: number, data: Partial<Order>) => {
-    await fetch(`/api/orders/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    fetchOrders();
+  const handleUpdateOffer = async (id: string, data: Partial<Offer>) => {
+    try {
+      await updateDoc(doc(db, "offers", id), data);
+      showToast("Offer updated");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `offers/${id}`);
+    }
+  };
+
+  const handleDeleteOffer = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this offer?')) {
+      try {
+        await deleteDoc(doc(db, "offers", id));
+        showToast("Offer deleted");
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, `offers/${id}`);
+      }
+    }
+  };
+
+  const handleUpdateOrder = async (id: string, data: Partial<Order>) => {
+    try {
+      await updateDoc(doc(db, "orders", id), data);
+      showToast("Order updated");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `orders/${id}`);
+    }
   };
 
   const handleAddOffer = async (data: any) => {
-    await fetch('/api/offers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    fetchOffers();
+    try {
+      await addDoc(collection(db, "offers"), {
+        ...data,
+        active: 1
+      });
+      showToast("Offer added");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, "offers");
+    }
   };
 
   if (products.length === 0) {
@@ -2838,7 +3578,7 @@ export default function App() {
           transition={{ repeat: Infinity, duration: 2 }}
           className="w-24 h-24 mb-8"
         >
-          <img src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" className="w-full h-full object-contain leaf-mask" referrerPolicy="no-referrer" />
+          <img src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" className="w-full h-full object-contain leaf-mask" referrerPolicy="no-referrer" loading="lazy" />
         </motion.div>
         <div className="space-y-4 text-center">
           <h2 className="text-3xl font-serif italic text-brand-olive">Namma Kolar Mangoes</h2>
@@ -2866,7 +3606,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-cream">
+    <ErrorBoundary>
+      <div className="min-h-screen bg-brand-cream">
       <Toast 
         message={toast.message} 
         isVisible={toast.visible} 
@@ -2935,6 +3676,7 @@ export default function App() {
             products={products}
             orders={orders}
             offers={offers}
+            bookings={bookings}
             onUpdateProduct={handleUpdateProduct}
             onAddProduct={handleAddProduct}
             onDeleteProduct={handleDeleteProduct}
@@ -2942,8 +3684,11 @@ export default function App() {
             onDeleteOffer={handleDeleteOffer}
             onAddOffer={handleAddOffer}
             onUpdateOrder={handleUpdateOrder}
-            onLogout={() => { setIsSellerAuthenticated(false); setView('store'); }}
+            onUpdateBooking={handleUpdateBooking}
+            onDeleteBooking={handleDeleteBooking}
+            onLogout={handleLogout}
             isLoading={isLoading}
+            dbStatus={dbStatus}
           />
         )}
       </main>
@@ -3002,6 +3747,37 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-6">
+                  {currentUser ? (
+                    <div className="p-6 bg-stone-50 rounded-[32px] text-center space-y-4">
+                      <div className="w-16 h-16 bg-brand-olive text-white rounded-full flex items-center justify-center mx-auto text-2xl font-serif italic">
+                        {currentUser.displayName?.[0] || currentUser.email?.[0] || 'U'}
+                      </div>
+                      <div>
+                        <p className="font-serif italic text-lg">{currentUser.displayName || 'User'}</p>
+                        <p className="text-xs text-stone-400 font-sans">{currentUser.email}</p>
+                      </div>
+                      <Button variant="outline" onClick={handleLogout} className="w-full border-stone-200 text-stone-600">
+                        {language === 'en' ? 'Sign Out' : 'ಸೈನ್ ಔಟ್'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      onClick={handleGoogleLogin} 
+                      className="w-full py-4 border-2 border-stone-100 flex items-center justify-center gap-3 hover:bg-stone-50 transition-all"
+                    >
+                      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                      <span className="font-sans font-bold uppercase tracking-widest text-[10px]">
+                        {language === 'en' ? 'Sign in with Google' : 'ಗೂಗಲ್ ಮೂಲಕ ಸೈನ್ ಇನ್'}
+                      </span>
+                    </Button>
+                  )}
+
+                  <div className="relative py-4">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-stone-100"></div></div>
+                    <div className="relative flex justify-center text-xs uppercase tracking-widest text-stone-300 font-sans bg-white px-2">{language === 'en' ? 'Seller Access' : 'ಮಾರಾಟಗಾರರ ಪ್ರವೇಶ'}</div>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-xs uppercase tracking-widest text-stone-400 font-sans">{language === 'en' ? 'Seller PIN' : 'ಮಾರಾಟಗಾರರ ಪಿನ್'}</label>
                     <input 
@@ -3012,7 +3788,7 @@ export default function App() {
                       className="w-full bg-stone-50 border-none rounded-2xl px-4 py-3 font-sans text-center text-2xl tracking-[1em] focus:ring-2 focus:ring-brand-olive/20 outline-none"
                       placeholder="••••"
                     />
-                    <Button onClick={handleSellerLogin} className="w-full mt-2">{language === 'en' ? 'Seller Access' : 'ಮಾರಾಟಗಾರರ ಪ್ರವೇಶ'}</Button>
+                    <Button onClick={handleSellerLogin} className="w-full mt-2">{language === 'en' ? 'Verify PIN' : 'ಪಿನ್ ಪರಿಶೀಲಿಸಿ'}</Button>
                   </div>
 
                   <div className="relative py-4">
@@ -3091,7 +3867,6 @@ export default function App() {
 
       {dbStatus && (
         <div 
-          title={dbStatus.details}
           className="fixed bottom-4 left-4 z-[60] flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-stone-100 warm-shadow-sm pointer-events-auto opacity-50 hover:opacity-100 transition-opacity cursor-help"
         >
           <div className={cn("w-1.5 h-1.5 rounded-full", dbStatus.connected ? "bg-emerald-500" : "bg-red-500")} />
@@ -3106,5 +3881,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </ErrorBoundary>
   );
 }

@@ -77,6 +77,13 @@ export const translations = {
     chatTitle: "Kolar Mango Assistant",
     chatSubtitle: "Ask me anything about our mangoes!",
     chatWelcome: "Namaste! I'm your Namma Kolar Mango assistant. How can I help you today?",
+    customerReviews: "Customer Reviews",
+    writeReview: "Write a Review",
+    rating: "Rating",
+    comment: "Comment",
+    submitReview: "Submit Review",
+    noReviews: "No reviews yet. Be the first to review!",
+    loginToReview: "Please login to write a review",
   },
   kn: {
     heroTitle: "ನಮ್ಮ ಕೋಲಾರ ಮಾವು",
@@ -156,6 +163,13 @@ export const translations = {
     chatTitle: "ಕೋಲಾರ ಮಾವಿನ ಸಹಾಯಕ",
     chatSubtitle: "ನಮ್ಮ ಮಾವಿನ ಹಣ್ಣುಗಳ ಬಗ್ಗೆ ಏನನ್ನಾದರೂ ಕೇಳಿ!",
     chatWelcome: "ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ನಮ್ಮ ಕೋಲಾರ ಮಾವಿನ ಸಹಾಯಕ. ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
+    customerReviews: "ಗ್ರಾಹಕರ ವಿಮರ್ಶೆಗಳು",
+    writeReview: "ವಿಮರ್ಶೆ ಬರೆಯಿರಿ",
+    rating: "ರೇಟಿಂಗ್",
+    comment: "ಅಭಿಪ್ರಾಯ",
+    submitReview: "ವಿಮರ್ಶೆ ಸಲ್ಲಿಸಿ",
+    noReviews: "ಇನ್ನೂ ಯಾವುದೇ ವಿಮರ್ಶೆಗಳಿಲ್ಲ. ಮೊದಲ ವಿಮರ್ಶಕರಾಗಿ!",
+    loginToReview: "ವಿಮರ್ಶೆ ಬರೆಯಲು ದಯವಿಟ್ಟು ಲಾಗಿನ್ ಮಾಡಿ",
   }
 };
 
