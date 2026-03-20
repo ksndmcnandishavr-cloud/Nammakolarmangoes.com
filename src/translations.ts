@@ -84,6 +84,8 @@ export const translations = {
     submitReview: "Submit Review",
     noReviews: "No reviews yet. Be the first to review!",
     loginToReview: "Please login to write a review",
+    searchPlaceholder: "Search by name or variety...",
+    noProductsFound: "No mangoes found matching your search.",
   },
   kn: {
     heroTitle: "ನಮ್ಮ ಕೋಲಾರ ಮಾವು",
@@ -170,6 +172,8 @@ export const translations = {
     submitReview: "ವಿಮರ್ಶೆ ಸಲ್ಲಿಸಿ",
     noReviews: "ಇನ್ನೂ ಯಾವುದೇ ವಿಮರ್ಶೆಗಳಿಲ್ಲ. ಮೊದಲ ವಿಮರ್ಶಕರಾಗಿ!",
     loginToReview: "ವಿಮರ್ಶೆ ಬರೆಯಲು ದಯವಿಟ್ಟು ಲಾಗಿನ್ ಮಾಡಿ",
+    searchPlaceholder: "ಹೆಸರು ಅಥವಾ ತಳಿಯ ಮೂಲಕ ಹುಡುಕಿ...",
+    noProductsFound: "ನಿಮ್ಮ ಹುಡುಕಾಟಕ್ಕೆ ಹೊಂದಿಕೆಯಾಗುವ ಯಾವುದೇ ಮಾವಿನ ಹಣ್ಣುಗಳು ಕಂಡುಬಂದಿಲ್ಲ.",
   }
 };
 

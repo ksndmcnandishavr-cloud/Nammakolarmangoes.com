@@ -25,9 +25,13 @@ export interface Order {
   promo_code?: string;
   status: string;
   created_at: string;
-  items: string;
+  items: string | any[];
   tracking_id?: string;
   estimated_delivery?: string;
+  payment_id?: string;
+  payment_status: 'paid' | 'partially_paid' | 'failed' | 'pending';
+  payment_method?: string;
+  paid_amount?: number;
 }
 
 export interface Offer {

@@ -2,27 +2,6 @@ import { useState, useEffect, ChangeEvent, useMemo, useRef, Component, ErrorInfo
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, Language } from './translations';
 import { GoogleGenAI } from "@google/genai";
-import { db, auth } from './firebase';
-import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  addDoc, 
-  serverTimestamp, 
-  getDocFromServer, 
-  doc,
-  where,
-  updateDoc,
-  deleteDoc
-} from 'firebase/firestore';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut,
-  User as FirebaseUser
-} from 'firebase/auth';
 import { 
   ShoppingBasket, 
   User, 
@@ -52,7 +31,9 @@ import {
   Calendar,
   Image as ImageIcon,
   Upload,
-  Star
+  Star,
+  AlertCircle,
+  Search
 } from 'lucide-react';
 import { Product, CartItem, Order, Offer, Testimonial, ProductReview } from './types';
 import { clsx, type ClassValue } from 'clsx';
@@ -259,33 +240,43 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail }: any) => 
 
   useEffect(() => {
     if (!product.id) return;
-    const q = query(collection(db, "products", product.id, "reviews"), orderBy("created_at", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reviewsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as ProductReview));
-      setReviews(reviewsData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `products/${product.id}/reviews`);
-    });
-    return () => unsubscribe();
+    const fetchReviews = async () => {
+      try {
+        const res = await fetch(`/api/products/${product.id}/reviews`);
+        const data = await res.json();
+        setReviews(data);
+      } catch (error) {
+        console.error("Failed to fetch reviews:", error);
+      }
+    };
+    fetchReviews();
   }, [product.id]);
 
   const handleSubmitReview = async () => {
-    if (!newReview.comment.trim() || !auth.currentUser) return;
+    if (!newReview.comment.trim()) return;
     setIsSubmitting(true);
     try {
       const reviewData = {
         product_id: product.id,
-        name: auth.currentUser.displayName || 'Anonymous',
+        name: 'Anonymous', // Simplified since auth is removed
         rating: newReview.rating,
-        comment: newReview.comment,
-        created_at: new Date().toISOString(),
-        uid: auth.currentUser.uid
+        comment: newReview.comment
       };
-      await addDoc(collection(db, "products", product.id, "reviews"), reviewData);
-      setNewReview({ rating: 5, comment: '' });
-      setIsReviewing(false);
+      const res = await fetch(`/api/products/${product.id}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reviewData)
+      });
+      if (res.ok) {
+        setNewReview({ rating: 5, comment: '' });
+        setIsReviewing(false);
+        // Re-fetch reviews
+        const updatedRes = await fetch(`/api/products/${product.id}/reviews`);
+        const updatedData = await updatedRes.json();
+        setReviews(updatedData);
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `products/${product.id}/reviews`);
+      console.error("Failed to submit review:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -779,7 +770,28 @@ const Footer = ({ t, language, onOpenHistory, onOpenAuth }: any) => (
   </footer>
 );
 
-const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onOpenCart, cartCount, onOpenAuth, onOpenHistory, onOpenBooking, heroBg, onHeroBgChange, isLoading, t, language, onLanguageChange, buyerEmail }: any) => {
+const Storefront = ({ 
+  products, 
+  filteredProducts,
+  searchQuery,
+  setSearchQuery,
+  offers, 
+  testimonials, 
+  onAddToCart, 
+  onBuyNow, 
+  onOpenCart, 
+  cartCount, 
+  onOpenAuth, 
+  onOpenHistory, 
+  onOpenBooking, 
+  heroBg, 
+  onHeroBgChange, 
+  isLoading, 
+  t, 
+  language, 
+  onLanguageChange, 
+  buyerEmail 
+}: any) => {
   return (
     <div className="min-h-screen pb-0">
       {/* Hero Section */}
@@ -993,6 +1005,20 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
             <p className="mt-8 text-stone-400 font-sans text-[10px] uppercase tracking-[0.3em] font-bold">
               {language === 'en' ? 'All Varieties on Single Screen' : 'ಎಲ್ಲಾ ತಳಿಗಳು ಒಂದೇ ಪರದೆಯಲ್ಲಿ'}
             </p>
+            
+            {/* Search Bar */}
+            <div className="mt-12 relative max-w-md">
+              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
+                <Search className="h-5 w-5 text-stone-400" />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t.searchPlaceholder}
+                className="block w-full pl-14 pr-6 py-4 bg-white border border-stone-100 rounded-full warm-shadow focus:ring-2 focus:ring-brand-mango/20 outline-none text-sm font-sans transition-all placeholder:text-stone-300"
+              />
+            </div>
           </div>
           <div className="flex gap-6">
             <button onClick={onOpenHistory} className="p-5 bg-white rounded-full warm-shadow hover:bg-stone-50 transition-all hover:scale-110 group">
@@ -1016,11 +1042,20 @@ const Storefront = ({ products, offers, testimonials, onAddToCart, onBuyNow, onO
           {isLoading ? (
             [1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)
           ) : (
-            products.map((product: Product) => (
+            filteredProducts.map((product: Product) => (
               <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} buyerEmail={buyerEmail} />
             ))
           )}
         </div>
+        
+        {!isLoading && filteredProducts.length === 0 && (
+          <div className="text-center py-20">
+            <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Search className="w-10 h-10 text-stone-300" />
+            </div>
+            <p className="text-stone-500 font-serif italic text-xl">{t.noProductsFound}</p>
+          </div>
+        )}
       </section>
 
       {/* Visit Our Farm Section */}
@@ -1119,23 +1154,17 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
     if (!searchEmail && !searchPhone) return;
     setLoading(true);
     try {
-      let q = query(collection(db, "orders"), orderBy("created_at", "desc"));
-      if (searchEmail) q = query(q, where("customer_email", "==", searchEmail));
-      if (searchPhone) q = query(q, where("phone", "==", searchPhone));
+      const params = new URLSearchParams();
+      if (searchEmail) params.append('email', searchEmail);
+      if (searchPhone) params.append('phone', searchPhone);
       
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Order));
-        setOrders(ordersData);
-        setSearched(true);
-        setLoading(false);
-      }, (error) => {
-        handleFirestoreError(error, OperationType.GET, "orders");
-        setLoading(false);
-      });
-
-      return unsubscribe;
+      const res = await fetch(`/api/orders/history?${params.toString()}`);
+      const data = await res.json();
+      setOrders(data);
+      setSearched(true);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to fetch history:", err);
+    } finally {
       setLoading(false);
     }
   };
@@ -1219,7 +1248,7 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
                         {new Date(order.created_at).toLocaleDateString(language === 'en' ? 'en-IN' : 'kn-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex flex-col items-end gap-2">
                       <span className={cn(
                         "px-4 py-1.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-[0.2em] shadow-sm",
                         order.status === 'delivered' ? "bg-emerald-50 text-emerald-600" : 
@@ -1227,6 +1256,19 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
                         "bg-brand-cream text-brand-olive"
                       )}>
                         {order.status}
+                      </span>
+                      <span className={cn(
+                        "px-3 py-1 rounded-full text-[8px] font-sans font-bold uppercase tracking-widest flex items-center gap-1.5",
+                        order.payment_status === 'paid' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : 
+                        order.payment_status === 'partially_paid' ? "bg-amber-50 text-amber-600 border border-amber-100" :
+                        order.payment_status === 'failed' ? "bg-red-50 text-red-600 border border-red-100" :
+                        "bg-stone-50 text-stone-400 border border-stone-100"
+                      )}>
+                        {order.payment_status === 'paid' && <CheckCircle2 className="w-3 h-3" />}
+                        {order.payment_status === 'partially_paid' && <Wallet className="w-3 h-3" />}
+                        {order.payment_status === 'failed' && <AlertCircle className="w-3 h-3" />}
+                        {order.payment_status === 'pending' && <Clock className="w-3 h-3" />}
+                        {order.payment_status === 'partially_paid' ? (language === 'en' ? 'Deposit Paid' : 'ಮುಂಗಡ ಪಾವತಿಸಲಾಗಿದೆ') : order.payment_status}
                       </span>
                     </div>
                   </div>
@@ -1289,7 +1331,7 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
                   )}
 
                   <div className="space-y-4 mb-8">
-                    {order.items.split(',').map((item, idx) => (
+                    {(Array.isArray(order.items) ? order.items.map(i => `${i.name} (${i.quantity} x ${i.selectedWeight}kg)`) : order.items.split(',')).map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center">
                         <span className="font-serif italic text-lg text-stone-700">{item}</span>
                         <div className="h-px flex-1 mx-4 bg-stone-100 border-dashed border-t" />
@@ -1549,14 +1591,15 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
   const handleRazorpayPayment = async (amount: number, isSplit: boolean) => {
     setIsProcessing(true);
     
-    let razorpayKey = (import.meta as any).env.VITE_RAZORPAY_KEY_ID;
+    const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
     
-    // Use the provided live key as a fallback if not set in environment
-    if (!razorpayKey || razorpayKey === "rzp_test_dummy") {
-      razorpayKey = "rzp_live_SMeoMTpuUMS7rB";
+    if (!razorpayKey) {
+      setIsProcessing(false);
+      alert(language === 'en' 
+        ? "Razorpay Key ID is missing. Please configure VITE_RAZORPAY_KEY_ID in your environment." 
+        : "Razorpay ಕೀ ಐಡಿ ಕಾಣೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಪರಿಸರದಲ್ಲಿ VITE_RAZORPAY_KEY_ID ಅನ್ನು ಕಾನ್ಫಿಗರ್ ಮಾಡಿ.");
+      return;
     }
-
-    const paymentPageUrl = "https://razorpay.me/@varatanahalliramakrishnareddy";
 
     try {
       // 1. Create order on server
@@ -1925,32 +1968,36 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
   const [isAddingOffer, setIsAddingOffer] = useState(false);
   const [dbStatus, setDbStatus] = useState<{ type: string, connected: boolean, details?: string } | null>(null);
 
-  const fetchBookings = () => {
-    const q = query(collection(db, "bookings"), orderBy("created_at", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const bookingsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setBookings(bookingsData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, "bookings");
-    });
-    return unsubscribe;
+  const fetchBookings = async () => {
+    try {
+      const res = await fetch('/api/bookings');
+      const data = await res.json();
+      setBookings(data);
+    } catch (error) {
+      console.error("Failed to fetch bookings:", error);
+    }
   };
 
   const handleUpdateBooking = async (id: string, status: string) => {
     try {
-      await updateDoc(doc(db, "bookings", id), { status });
-      showToast("Booking updated successfully");
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (res.ok) {
+        showToast("Booking updated successfully");
+        fetchBookings();
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `bookings/${id}`);
+      console.error("Failed to update booking:", error);
     }
   };
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
     if (activeTab === 'bookings') {
-      unsubscribe = fetchBookings();
+      fetchBookings();
     }
-    return () => unsubscribe?.();
   }, [activeTab]);
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -2270,6 +2317,19 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                         <span className="px-2 py-0.5 bg-brand-olive/10 text-brand-olive text-[10px] rounded-full uppercase tracking-wider font-bold">
                           {order.status}
                         </span>
+                        <span className={cn(
+                          "px-2 py-0.5 text-[10px] rounded-full uppercase tracking-wider font-bold flex items-center gap-1",
+                          order.payment_status === 'paid' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : 
+                          order.payment_status === 'partially_paid' ? "bg-amber-50 text-amber-600 border border-amber-100" :
+                          order.payment_status === 'failed' ? "bg-red-50 text-red-600 border border-red-100" :
+                          "bg-stone-100 text-stone-400 border border-stone-200"
+                        )}>
+                          {order.payment_status === 'paid' && <CheckCircle2 className="w-3 h-3" />}
+                          {order.payment_status === 'partially_paid' && <Wallet className="w-3 h-3" />}
+                          {order.payment_status === 'failed' && <AlertCircle className="w-3 h-3" />}
+                          {order.payment_status === 'pending' && <Clock className="w-3 h-3" />}
+                          {order.payment_status}
+                        </span>
                       </div>
                       <h3 className="text-xl font-serif italic">{order.customer_name}</h3>
                     </div>
@@ -2287,7 +2347,9 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                     </div>
                     <div className="flex items-start gap-3">
                       <Package className="w-4 h-4 text-stone-400 mt-1" />
-                      <p className="text-xs font-sans text-stone-500">{order.items}</p>
+                      <p className="text-xs font-sans text-stone-500">
+                        {Array.isArray(order.items) ? order.items.map(i => `${i.name} (${i.quantity} x ${i.selectedWeight}kg)`).join(', ') : order.items}
+                      </p>
                     </div>
                   </div>
 
@@ -2319,6 +2381,15 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                       <Clock className="w-3 h-3" /> {new Date(order.created_at).toLocaleString()}
                     </span>
                     <div className="flex gap-2">
+                      {order.payment_status === 'partially_paid' && (
+                        <Button 
+                          onClick={() => onUpdateOrder(order.id, { payment_status: 'paid', paid_amount: order.total })}
+                          variant="secondary" 
+                          className="px-4 py-2 text-xs border-amber-200 text-amber-700 hover:bg-amber-50"
+                        >
+                          Mark as Fully Paid
+                        </Button>
+                      )}
                       {order.status !== 'delivered' && (
                         <Button 
                           onClick={() => onUpdateOrder(order.id, { status: 'shipped' })}
@@ -2743,57 +2814,6 @@ const Toast = ({ message, isVisible, onHide }: any) => (
 
 // --- Main App ---
 
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
-  }
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
-    operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
 export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
     super(props);
@@ -2810,16 +2830,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError
 
   render() {
     if (this.state.hasError) {
-      let errorMessage = "Something went wrong.";
-      try {
-        const errorData = JSON.parse(this.state.error?.message || '{}');
-        if (errorData.error) {
-          errorMessage = `Firebase Error: ${errorData.error} (Operation: ${errorData.operationType})`;
-        }
-      } catch (e) {
-        errorMessage = this.state.error?.message || errorMessage;
-      }
-
+      let errorMessage = this.state.error?.message || "Something went wrong.";
+      
       return (
         <div className="min-h-screen flex items-center justify-center bg-stone-50 p-6">
           <Card className="max-w-md w-full text-center">
@@ -2842,48 +2854,20 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError
 
 export default function App() {
   const [view, setView] = useState<'store' | 'checkout' | 'seller' | 'history'>('store');
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setIsAuthReady(true);
-    });
-    return () => unsubscribe();
-  }, []);
+  const [user, setUser] = useState<any | null>(null);
 
   const handleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login error:", error);
-    }
+    // Firebase auth removed
+    showToast("Login feature currently unavailable");
   };
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+    // Firebase auth removed
+    setUser(null);
   };
 
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration. ");
-        }
-      }
-    }
-    testConnection();
-  }, []);
-
   const [products, setProducts] = useState<Product[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [offers, setOffers] = useState<Offer[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -2909,47 +2893,52 @@ export default function App() {
   const [isSellerAuthenticated, setIsSellerAuthenticated] = useState(false);
 
   useEffect(() => {
-    if (!isAuthReady) return;
-    
-    const q = query(collection(db, "products"), orderBy("name"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const productsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Product));
-      setProducts(productsData);
-      setIsLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, "products");
-    });
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch('/api/products');
+        const data = await res.json();
+        setProducts(data);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Failed to fetch products:", error);
+        setIsLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
-    return () => unsubscribe();
-  }, [isAuthReady]);
-
-  useEffect(() => {
-    if (!isAuthReady) return;
-    
-    const q = query(collection(db, "testimonials"), where("active", "==", 1), where("language", "==", language));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const testimonialsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Testimonial));
-      setTestimonials(testimonialsData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, "testimonials");
-    });
-
-    return () => unsubscribe();
-  }, [isAuthReady, language]);
+  const filteredProducts = useMemo(() => {
+    return products.filter(product => 
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.variety.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [products, searchQuery]);
 
   useEffect(() => {
-    if (!isAuthReady) return;
-    
-    const q = query(collection(db, "offers"), where("active", "==", 1));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const offersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Offer));
-      setOffers(offersData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, "offers");
-    });
+    const fetchTestimonials = async () => {
+      try {
+        const res = await fetch(`/api/testimonials?language=${language}`);
+        const data = await res.json();
+        setTestimonials(data);
+      } catch (error) {
+        console.error("Failed to fetch testimonials:", error);
+      }
+    };
+    fetchTestimonials();
+  }, [language]);
 
-    return () => unsubscribe();
-  }, [isAuthReady]);
+  useEffect(() => {
+    const fetchOffers = async () => {
+      try {
+        const res = await fetch('/api/offers');
+        const data = await res.json();
+        setOffers(data);
+      } catch (error) {
+        console.error("Failed to fetch offers:", error);
+      }
+    };
+    fetchOffers();
+  }, []);
 
   useEffect(() => {
     fetchDbStatus();
@@ -2964,17 +2953,18 @@ export default function App() {
   };
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
     if (isSellerAuthenticated && view === 'seller') {
-      const q = query(collection(db, "orders"), orderBy("created_at", "desc"));
-      unsubscribe = onSnapshot(q, (snapshot) => {
-        const ordersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as Order));
-        setOrders(ordersData);
-      }, (error) => {
-        handleFirestoreError(error, OperationType.GET, "orders");
-      });
+      const fetchOrders = async () => {
+        try {
+          const res = await fetch('/api/orders');
+          const data = await res.json();
+          setOrders(data);
+        } catch (error) {
+          console.error("Failed to fetch orders:", error);
+        }
+      };
+      fetchOrders();
     }
-    return () => unsubscribe?.();
   }, [isSellerAuthenticated, view]);
 
   const handleAddToCart = (product: Product, weight: number) => {
@@ -2995,14 +2985,16 @@ export default function App() {
 
   const handleBookFarmVisit = async (bookingData: any) => {
     try {
-      await addDoc(collection(db, "bookings"), {
-        ...bookingData,
-        created_at: new Date().toISOString(),
-        status: 'pending'
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bookingData)
       });
-      showToast(`Farm visit booked for ${bookingData.date} at ${bookingData.time}!`);
+      if (res.ok) {
+        showToast(`Farm visit booked for ${bookingData.date} at ${bookingData.time}!`);
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, "bookings");
+      console.error("Failed to book farm visit:", error);
       showToast("Failed to book farm visit. Please try again.");
     }
   };
@@ -3046,17 +3038,27 @@ export default function App() {
         paid_amount: formData.paid_amount || 0,
         status: 'pending',
         created_at: new Date().toISOString(),
-        uid: auth.currentUser?.uid || 'guest'
+        uid: 'guest'
       };
 
-      await addDoc(collection(db, "orders"), orderData);
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save order');
+      }
 
       setCart([]);
       setAppliedOffer(null);
       setBuyerEmail(formData.email);
       setView('history');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, "orders");
+      console.error("Checkout error:", error);
+      showToast("Failed to place order. Please try again.");
     }
   };
 
@@ -3087,29 +3089,45 @@ export default function App() {
   const handleUpdateProduct = async (id: string, data: Partial<Product>) => {
     try {
       const { id: _, ...updateData } = data as any;
-      await updateDoc(doc(db, "products", id), updateData);
-      showToast("Product updated successfully");
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+      });
+      if (res.ok) {
+        showToast("Product updated successfully");
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
+      console.error("Failed to update product:", error);
     }
   };
 
   const handleAddProduct = async (data: any) => {
     try {
-      await addDoc(collection(db, "products"), data);
-      showToast("Product added successfully");
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        showToast("Product added successfully");
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, "products");
+      console.error("Failed to add product:", error);
     }
   };
 
   const handleDeleteProduct = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this variety?')) {
       try {
-        await deleteDoc(doc(db, "products", id));
-        showToast("Product deleted successfully");
+        const res = await fetch(`/api/products/${id}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          showToast("Product deleted successfully");
+        }
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `products/${id}`);
+        console.error("Failed to delete product:", error);
       }
     }
   };
@@ -3117,20 +3135,30 @@ export default function App() {
   const handleUpdateOffer = async (id: string, data: Partial<Offer>) => {
     try {
       const { id: _, ...updateData } = data as any;
-      await updateDoc(doc(db, "offers", id), updateData);
-      showToast("Offer updated successfully");
+      const res = await fetch(`/api/offers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+      });
+      if (res.ok) {
+        showToast("Offer updated successfully");
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `offers/${id}`);
+      console.error("Failed to update offer:", error);
     }
   };
 
   const handleDeleteOffer = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this offer?')) {
       try {
-        await deleteDoc(doc(db, "offers", id));
-        showToast("Offer deleted successfully");
+        const res = await fetch(`/api/offers/${id}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          showToast("Offer deleted successfully");
+        }
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `offers/${id}`);
+        console.error("Failed to delete offer:", error);
       }
     }
   };
@@ -3138,19 +3166,31 @@ export default function App() {
   const handleUpdateOrder = async (id: string, data: Partial<Order>) => {
     try {
       const { id: _, ...updateData } = data as any;
-      await updateDoc(doc(db, "orders", id), updateData);
-      showToast("Order updated successfully");
+      const res = await fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+      });
+      if (res.ok) {
+        showToast("Order updated successfully");
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `orders/${id}`);
+      console.error("Failed to update order:", error);
     }
   };
 
   const handleAddOffer = async (data: any) => {
     try {
-      await addDoc(collection(db, "offers"), data);
-      showToast("Offer added successfully");
+      const res = await fetch('/api/offers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        showToast("Offer added successfully");
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, "offers");
+      console.error("Failed to add offer:", error);
     }
   };
 
@@ -3218,6 +3258,9 @@ export default function App() {
         {view === 'store' && (
           <Storefront 
             products={products} 
+            filteredProducts={filteredProducts}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
             offers={offers}
             testimonials={testimonials}
             onAddToCart={handleAddToCart}

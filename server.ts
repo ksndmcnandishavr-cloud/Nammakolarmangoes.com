@@ -3,8 +3,6 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import Stripe from "stripe";
 import Razorpay from "razorpay";
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -12,144 +10,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database("mangoes.db");
-
-// Initialize Firebase Admin
-let firestore: admin.firestore.Firestore | null = null;
-let firestoreError: string | null = null;
-
-if (process.env.FIREBASE_PRIVATE_KEY) {
-  try {
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY
-      .trim()
-      .replace(/^["']+|["']+$/g, '') // Remove leading/trailing quotes
-      .replace(/\\n/g, '\n')         // Convert literal \n to newlines
-      .replace(/\r\n/g, '\n');       // Normalize line endings
-
-    // Extract the actual key content if headers are present
-    const keyMatch = privateKey.match(/-----BEGIN PRIVATE KEY-----([\s\S]*)-----END PRIVATE KEY-----/);
-    let keyBody = keyMatch ? keyMatch[1] : privateKey;
-
-    // Clean the key body: remove EVERYTHING except valid Base64 characters
-    // Base64 chars are A-Z, a-z, 0-9, +, /, and =
-    keyBody = keyBody.replace(/[^A-Za-z0-9+/=]/g, '');
-
-    if (keyBody.includes('REDACTED') || keyBody.includes('TODO')) {
-      console.warn("Private key contains placeholder text. Falling back to SQLite.");
-      firestoreError = "Private key contains placeholder text ('REDACTED' or 'TODO'). Please provide the actual private key from your service account JSON.";
-    } else if (keyBody.length < 100) {
-      console.warn("Private key body is too short. Falling back to SQLite.");
-      firestoreError = `Private key body is too short (${keyBody.length} chars). A valid Firebase private key is typically > 1600 characters. Please check your FIREBASE_PRIVATE_KEY secret.`;
-    } else {
-      // Reconstruct the PEM format with proper 64-character line breaks
-      const chunks = [];
-      for (let i = 0; i < keyBody.length; i += 64) {
-        chunks.push(keyBody.substring(i, i + 64));
-      }
-      const formattedKeyBody = chunks.join('\n');
-      privateKey = `-----BEGIN PRIVATE KEY-----\n${formattedKeyBody}\n-----END PRIVATE KEY-----\n`;
-      console.log("Cleaned private key body length:", keyBody.length);
-      console.log("Key body starts with:", keyBody.substring(0, 10), "... ends with:", keyBody.substring(keyBody.length - 10));
-
-      // Load config for fallback values
-      let config: any = {};
-      try {
-        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-        config = JSON.parse(await import('fs/promises').then(fs => fs.readFile(configPath, 'utf-8')));
-      } catch (e) {}
-
-      const projectId = process.env.FIREBASE_PROJECT_ID || config.projectId;
-      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-      
-      if (!projectId || !clientEmail) {
-        firestoreError = `Missing required Firebase configuration: ${!projectId ? 'Project ID' : ''} ${!clientEmail ? 'Client Email' : ''}`;
-        console.warn(firestoreError);
-      } else {
-        console.log("Attempting to initialize Firestore with Project ID:", projectId);
-        console.log("Client Email:", clientEmail);
-        
-        if (!admin.apps.length) {
-          try {
-            admin.initializeApp({
-              credential: admin.credential.cert({
-                projectId: projectId,
-                clientEmail: clientEmail,
-                privateKey: privateKey,
-              }),
-            });
-            console.log("Firebase Admin initialized successfully");
-          } catch (initError: any) {
-            console.error("Firebase Admin initialization failed:", initError.message);
-            firestoreError = initError.message;
-          }
-        }
-
-        if (admin.apps.length) {
-          // Use the specific database ID if provided in the environment or config
-          const databaseId = process.env.FIRESTORE_DATABASE_ID || config.firestoreDatabaseId || "";
-          console.log("Targeting Database ID:", databaseId || "(default)");
-          
-          try {
-            if (databaseId) {
-              firestore = getFirestore(databaseId);
-            } else {
-              firestore = getFirestore();
-            }
-            
-            // Verify connection immediately
-            await firestore.collection("products").limit(1).get();
-            console.log("Firestore connection verified successfully");
-          } catch (connError: any) {
-            console.error("Firestore connection verification failed:", connError.message);
-            firestoreError = connError.message;
-            firestore = null; // Ensure we fall back
-          }
-        }
-      }
-    }
-    
-    // Seed Firestore if empty
-    const seedFirestore = async () => {
-      if (!firestore) return;
-      try {
-        const productsSnapshot = await firestore.collection("products").limit(1).get();
-        if (productsSnapshot.empty) {
-          console.log("Seeding Firestore with initial data...");
-          const products = [
-            { name: "Premium Alphonso", variety: "Alphonso", description: "The king of mangoes, known for its rich, creamy texture and sweet aroma.", price: 1200, stock: 50, image_url: "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=800", available: 1 },
-            { name: "Sweet Badami", variety: "Badami", description: "Often called the Karnataka Alphonso, it's incredibly sweet and pulpy.", price: 800, stock: 100, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800", available: 1 },
-            { name: "Kesar Delight", variety: "Kesar", description: "Famous for its bright orange pulp and intense fragrance.", price: 950, stock: 75, image_url: "https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?auto=format&fit=crop&q=80&w=800", available: 1 }
-          ];
-          for (const p of products) await firestore.collection("products").add(p);
-
-          const testimonials = [
-            { name: "Amrutesh oli", rating: 5, review: "The best Kolar mangoes I've ever had. They arrived perfectly ripe and the sweetness is unmatched.", date: "May 2025", language: "en", active: 1 },
-            { name: "ಅಮೃತೇಶ್ ಓಲಿ", rating: 5, review: "ನಾನು ತಿಂದ ಅತ್ಯುತ್ತಮ ಕೋಲಾರ ಮಾವಿನ ಹಣ್ಣುಗಳು. ಅವು ಸರಿಯಾಗಿ ಹಣ್ಣಾಗಿದ್ದವು ಮತ್ತು ಸಿಹಿ ಅದ್ಭುತವಾಗಿದೆ.", date: "May 2025", language: "kn", active: 1 }
-          ];
-          for (const t of testimonials) await firestore.collection("testimonials").add(t);
-
-          const offers = [
-            { title: "Kolar Harvest Special", description: "Get 10% off on your first order of the season!", code: "KOLAR10", discount_percent: 10, active: 1, image_url: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" }
-          ];
-          for (const o of offers) await firestore.collection("offers").add(o);
-          console.log("Firestore seeded successfully");
-        }
-      } catch (e) {
-        console.error("Error seeding Firestore:", e);
-      }
-    };
-    seedFirestore();
-  } catch (error: any) {
-    console.error("Firestore initialization error details:", {
-      message: error.message,
-      code: error.code,
-      stack: error.stack
-    });
-    firestoreError = error.message;
-  }
-} else {
-  console.log("Firestore environment variables missing. Falling back to SQLite.");
-  firestoreError = "Missing environment variables";
-}
 
 // Initialize Database
 db.exec(`
@@ -286,51 +146,20 @@ async function startServer() {
 
   // API Routes
   app.get("/api/db-status", async (req, res) => {
-    let isConnected = false;
-    let details = "";
-
-    if (firestore) {
-      try {
-        // Try a simple read to verify connection
-        await firestore.collection("products").limit(1).get();
-        isConnected = true;
-        details = "Connected to Firestore";
-      } catch (e: any) {
-        isConnected = false;
-        details = `Firestore connection failed: ${e.message}`;
-        console.error(details);
-      }
-    } else {
-      isConnected = !!db;
-      details = firestoreError ? `Falling back to SQLite: ${firestoreError}` : "Using SQLite";
-    }
-
     res.json({ 
-      type: firestore ? "Firestore" : "SQLite",
-      connected: isConnected,
-      details: details,
-      error: firestoreError
+      type: "SQLite",
+      connected: !!db,
+      details: "Using SQLite"
     });
   });
 
   app.get("/api/products", async (req, res) => {
-    if (firestore) {
-      const snapshot = await firestore.collection("products").get();
-      const products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(products);
-    }
     const products = db.prepare("SELECT * FROM products").all();
     res.json(products);
   });
 
   app.post("/api/products", async (req, res) => {
     const { name, variety, description, price, stock, image_url } = req.body;
-    if (firestore) {
-      const docRef = await firestore.collection("products").add({
-        name, variety, description, price, stock, image_url, available: 1
-      });
-      return res.json({ id: docRef.id });
-    }
     const info = db.prepare("INSERT INTO products (name, variety, description, price, stock, image_url) VALUES (?, ?, ?, ?, ?, ?)")
       .run(name, variety, description, price, stock, image_url);
     res.json({ id: info.lastInsertRowid });
@@ -338,35 +167,18 @@ async function startServer() {
 
   app.put("/api/products/:id", async (req, res) => {
     const { name, variety, description, price, stock, available } = req.body;
-    if (firestore) {
-      await firestore.collection("products").doc(req.params.id).update({
-        name, variety, description, price, stock, available: available ? 1 : 0
-      });
-      return res.json({ success: true });
-    }
     db.prepare("UPDATE products SET name = ?, variety = ?, description = ?, price = ?, stock = ?, available = ? WHERE id = ?")
       .run(name, variety, description, price, stock, available ? 1 : 0, req.params.id);
     res.json({ success: true });
   });
 
   app.get("/api/offers", async (req, res) => {
-    if (firestore) {
-      const snapshot = await firestore.collection("offers").get();
-      const offers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(offers);
-    }
     const offers = db.prepare("SELECT * FROM offers").all();
     res.json(offers);
   });
 
   app.post("/api/offers", async (req, res) => {
     const { title, description, code, discount_percent, image_url } = req.body;
-    if (firestore) {
-      const docRef = await firestore.collection("offers").add({
-        title, description, code, discount_percent, image_url, active: 1
-      });
-      return res.json({ id: docRef.id });
-    }
     const info = db.prepare("INSERT INTO offers (title, description, code, discount_percent, image_url) VALUES (?, ?, ?, ?, ?)")
       .run(title, description, code, discount_percent, image_url);
     res.json({ id: info.lastInsertRowid });
@@ -374,32 +186,17 @@ async function startServer() {
 
   app.put("/api/offers/:id", async (req, res) => {
     const { title, description, code, discount_percent, active } = req.body;
-    if (firestore) {
-      await firestore.collection("offers").doc(req.params.id).update({
-        title, description, code, discount_percent, active: active ? 1 : 0
-      });
-      return res.json({ success: true });
-    }
     db.prepare("UPDATE offers SET title = ?, description = ?, code = ?, discount_percent = ?, active = ? WHERE id = ?")
       .run(title, description, code, discount_percent, active ? 1 : 0, req.params.id);
     res.json({ success: true });
   });
 
   app.delete("/api/offers/:id", async (req, res) => {
-    if (firestore) {
-      await firestore.collection("offers").doc(req.params.id).delete();
-      return res.json({ success: true });
-    }
     db.prepare("DELETE FROM offers WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
   app.get("/api/orders", async (req, res) => {
-    if (firestore) {
-      const snapshot = await firestore.collection("orders").orderBy("created_at", "desc").get();
-      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(orders);
-    }
     const orders = db.prepare(`
       SELECT o.*, GROUP_CONCAT(p.name || ' (' || oi.quantity || 'x' || oi.price || ')') as items
       FROM orders o
@@ -412,15 +209,9 @@ async function startServer() {
   });
 
   app.put("/api/orders/:id", async (req, res) => {
-    const { status, tracking_id, estimated_delivery } = req.body;
-    if (firestore) {
-      await firestore.collection("orders").doc(req.params.id).update({
-        status, tracking_id, estimated_delivery
-      });
-      return res.json({ success: true });
-    }
-    db.prepare("UPDATE orders SET status = ?, tracking_id = ?, estimated_delivery = ? WHERE id = ?")
-      .run(status, tracking_id, estimated_delivery, req.params.id);
+    const { status, tracking_id, estimated_delivery, payment_status, paid_amount } = req.body;
+    db.prepare("UPDATE orders SET status = ?, tracking_id = ?, estimated_delivery = ?, payment_status = COALESCE(?, payment_status), paid_amount = COALESCE(?, paid_amount) WHERE id = ?")
+      .run(status, tracking_id, estimated_delivery, payment_status, paid_amount, req.params.id);
     res.json({ success: true });
   });
 
@@ -428,15 +219,6 @@ async function startServer() {
     const { email, phone } = req.query;
     if (!email && !phone) {
       return res.status(400).json({ error: "Email or phone required" });
-    }
-    if (firestore) {
-      let query: admin.firestore.Query = firestore.collection("orders");
-      if (email) query = query.where("customer_email", "==", email);
-      if (phone) query = query.where("phone", "==", phone);
-      
-      const snapshot = await query.orderBy("created_at", "desc").get();
-      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(orders);
     }
     const orders = db.prepare(`
       SELECT o.*, GROUP_CONCAT(p.name || ' (' || oi.quantity || 'x' || oi.price || ')') as items
@@ -466,41 +248,6 @@ async function startServer() {
       paid_amount
     } = req.body;
     
-    if (firestore) {
-      const orderData = {
-        customer_name, 
-        customer_email, 
-        address, 
-        phone, 
-        total, 
-        delivery_charge, 
-        promo_code,
-        payment_id,
-        payment_status,
-        payment_method,
-        paid_amount,
-        status: 'pending',
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
-        items: items.map((item: any) => ({
-          product_id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price
-        }))
-      };
-      const docRef = await firestore.collection("orders").add(orderData);
-      
-      // Update stock in Firestore
-      for (const item of items) {
-        const productRef = firestore.collection("products").doc(String(item.id));
-        await productRef.update({
-          stock: admin.firestore.FieldValue.increment(-item.quantity)
-        });
-      }
-      
-      return res.json({ id: docRef.id });
-    }
-
     const transaction = db.transaction(() => {
       const info = db.prepare(`
         INSERT INTO orders (
@@ -611,14 +358,6 @@ async function startServer() {
 
   app.get("/api/buyer/history", async (req, res) => {
     const { email } = req.query;
-    if (firestore) {
-      const snapshot = await firestore.collection("orders")
-        .where("customer_email", "==", email)
-        .orderBy("created_at", "desc")
-        .get();
-      const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(orders);
-    }
     const orders = db.prepare(`
       SELECT o.*, GROUP_CONCAT(p.name || ' (x' || oi.quantity || ')') as items
       FROM orders o
@@ -634,61 +373,30 @@ async function startServer() {
   // Bookings
   app.post("/api/bookings", async (req, res) => {
     const { name, phone, date, time, guests } = req.body;
-    if (firestore) {
-      const docRef = await firestore.collection("bookings").add({
-        name, phone, date, time, guests, status: 'pending', created_at: admin.firestore.FieldValue.serverTimestamp()
-      });
-      return res.json({ id: docRef.id });
-    }
     const info = db.prepare("INSERT INTO bookings (name, phone, date, time, guests) VALUES (?, ?, ?, ?, ?)")
       .run(name, phone, date, time, guests);
     res.json({ id: info.lastInsertRowid });
   });
 
   app.get("/api/bookings", async (req, res) => {
-    if (firestore) {
-      const snapshot = await firestore.collection("bookings").orderBy("date", "desc").get();
-      const bookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(bookings);
-    }
     const bookings = db.prepare("SELECT * FROM bookings ORDER BY date DESC, time DESC").all();
     res.json(bookings);
   });
 
   app.put("/api/bookings/:id", async (req, res) => {
     const { status } = req.body;
-    if (firestore) {
-      await firestore.collection("bookings").doc(req.params.id).update({ status });
-      return res.json({ success: true });
-    }
     db.prepare("UPDATE bookings SET status = ? WHERE id = ?").run(status, req.params.id);
     res.json({ success: true });
   });
 
   app.get("/api/testimonials", async (req, res) => {
     const { language } = req.query;
-    if (firestore) {
-      const snapshot = await firestore.collection("testimonials")
-        .where("active", "==", 1)
-        .where("language", "==", language || 'en')
-        .get();
-      const testimonials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(testimonials);
-    }
     const testimonials = db.prepare("SELECT * FROM testimonials WHERE active = 1 AND language = ?").all(language || 'en');
     res.json(testimonials);
   });
 
   app.get("/api/products/:id/reviews", async (req, res) => {
     const { id } = req.params;
-    if (firestore) {
-      const snapshot = await firestore.collection("product_reviews")
-        .where("product_id", "==", id)
-        .orderBy("created_at", "desc")
-        .get();
-      const reviews = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return res.json(reviews);
-    }
     const reviews = db.prepare("SELECT * FROM product_reviews WHERE product_id = ? ORDER BY created_at DESC").all(id);
     res.json(reviews);
   });
@@ -696,16 +404,6 @@ async function startServer() {
   app.post("/api/products/:id/reviews", async (req, res) => {
     const { id } = req.params;
     const { name, rating, comment } = req.body;
-    if (firestore) {
-      const docRef = await firestore.collection("product_reviews").add({
-        product_id: id,
-        name,
-        rating,
-        comment,
-        created_at: admin.firestore.FieldValue.serverTimestamp()
-      });
-      return res.json({ id: docRef.id });
-    }
     const info = db.prepare("INSERT INTO product_reviews (product_id, name, rating, comment) VALUES (?, ?, ?, ?)")
       .run(id, name, rating, comment);
     res.json({ id: info.lastInsertRowid });
