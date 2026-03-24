@@ -10,6 +10,8 @@
   --color-brand-mango-dark: #FF8C00;
   --color-brand-leaf: #2D5A27;
   --color-brand-leaf-light: #4A7A3F;
+  --sidebar-width: 280px;
+  --topbar-height: 72px;
 }
 
 @layer base {

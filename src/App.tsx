@@ -1,9 +1,10 @@
-import { useState, useEffect, ChangeEvent, useMemo, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import * as React from 'react';
+import { useState, useEffect, ChangeEvent, useMemo, useRef, ErrorInfo, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, Language } from './translations';
-import { GoogleGenAI } from "@google/genai";
 import { 
   ShoppingBasket, 
+  Leaf,
   User, 
   LayoutDashboard, 
   X, 
@@ -11,6 +12,8 @@ import {
   Minus, 
   Trash2, 
   ChevronRight,
+  ChevronLeft,
+  Tag,
   Package,
   Clock,
   MapPin,
@@ -20,7 +23,6 @@ import {
   Settings,
   LogOut,
   HelpCircle,
-  MessageCircle,
   Info,
   BookOpen,
   CreditCard,
@@ -33,7 +35,9 @@ import {
   Upload,
   Star,
   AlertCircle,
-  Search
+  Search,
+  Bell,
+  MessageSquare
 } from 'lucide-react';
 import { Product, CartItem, Order, Offer, Testimonial, ProductReview } from './types';
 import { clsx, type ClassValue } from 'clsx';
@@ -49,167 +53,95 @@ function cn(...inputs: ClassValue[]) {
 
 // --- Components ---
 
-const HelpChat = ({ t, language }: { t: any, language: Language }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
+const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
-
-    const userMessage = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
-    setIsLoading(true);
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          { role: 'user', parts: [{ text: `You are a helpful farm assistant for "Namma Kolar Mangoes", a mango farm in Srinivasapura, Kolar. 
-            The farm is owned by Ramakrishnareddy V N. 
-            Location: Varatanahalli, Srinivasapura, Kolar, Karnataka-563135.
-            Coordinates: 13.315970, 78.153239.
-            Phone: +91 97430 25459 / 91645 02728.
-            We sell varieties like Raspuri, Badami (Alphonso), Mallika, Kesar, and Totapuri.
-            Delivery is available in Bangalore within 24-48 hours.
-            Free delivery for orders above 15kg.
-            Answer in ${language === 'en' ? 'English' : 'Kannada'}.
-            Be polite, warm, and helpful.
-            User asked: ${userMessage}` }] }
-        ],
-      });
-
-      const aiText = response.text || (language === 'en' ? "I'm sorry, I couldn't process that." : "ಕ್ಷಮಿಸಿ, ನನಗೆ ಅದನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.");
-      setMessages(prev => [...prev, { role: 'model', text: aiText }]);
-    } catch (error) {
-      console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: language === 'en' ? "Connection error. Please try again." : "ಸಂಪರ್ಕ ದೋಷ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ." }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    const timer = setTimeout(onComplete, 2500);
+    return () => clearTimeout(timer);
+  }, [onComplete]);
 
   return (
-    <div className="fixed bottom-8 right-8 z-[100] flex flex-col items-end">
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="mb-4 w-[350px] md:w-[400px] h-[500px] bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col border border-stone-100"
-          >
-            {/* Header */}
-            <div className="bg-brand-olive p-6 text-white flex justify-between items-center">
-              <div>
-                <h3 className="font-serif italic text-xl">{t.chatTitle}</h3>
-                <p className="text-[10px] uppercase tracking-widest opacity-70">{t.chatSubtitle}</p>
-              </div>
-              <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Messages */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-stone-50/50">
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-brand-mango/20 flex items-center justify-center flex-shrink-0">
-                  <MessageCircle size={16} className="text-brand-mango" />
-                </div>
-                <div className="bg-white p-4 rounded-[20px] rounded-tl-none shadow-sm text-sm text-stone-700 leading-relaxed">
-                  {t.chatWelcome}
-                </div>
-              </div>
-
-              {messages.map((msg, i) => (
-                <div key={i} className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "")}>
-                  <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0",
-                    msg.role === 'user' ? "bg-brand-olive/10" : "bg-brand-mango/20"
-                  )}>
-                    {msg.role === 'user' ? <User size={16} className="text-brand-olive" /> : <MessageCircle size={16} className="text-brand-mango" />}
-                  </div>
-                  <div className={cn(
-                    "p-4 rounded-[20px] shadow-sm text-sm leading-relaxed max-w-[80%]",
-                    msg.role === 'user' 
-                      ? "bg-brand-olive text-white rounded-tr-none" 
-                      : "bg-white text-stone-700 rounded-tl-none"
-                  )}>
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-brand-mango/20 flex items-center justify-center flex-shrink-0 animate-pulse">
-                    <MessageCircle size={16} className="text-brand-mango" />
-                  </div>
-                  <div className="bg-white p-4 rounded-[20px] rounded-tl-none shadow-sm text-sm text-stone-400">
-                    <Loader2 size={16} className="animate-spin" />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Input */}
-            <div className="p-4 bg-white border-t border-stone-100 flex gap-2">
-              <input
-                type="text"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
-                placeholder={t.chatPlaceholder}
-                className="flex-1 bg-stone-50 border-none rounded-full px-6 py-3 text-sm focus:ring-2 focus:ring-brand-mango/20 outline-none"
-              />
-              <button 
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading}
-                className="w-12 h-12 rounded-full bg-brand-mango text-stone-900 flex items-center justify-center hover:bg-brand-mango-dark transition-colors disabled:opacity-50"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          "w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-500",
-          isOpen ? "bg-stone-900 text-white rotate-90" : "bg-brand-mango text-stone-900"
-        )}
+    <motion.div 
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[1000] bg-brand-cream flex flex-col items-center justify-center p-8"
+    >
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 1, ease: "easeOut" }}
+        className="relative"
       >
-        {isOpen ? <X size={28} /> : <MessageCircle size={28} />}
-      </motion.button>
-    </div>
+        <div className="w-32 h-32 bg-brand-mango rounded-full flex items-center justify-center shadow-2xl mango-glow animate-float">
+          <Package size={48} className="text-stone-900" />
+        </div>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="mt-8 text-center"
+        >
+          <h1 className="font-serif italic text-4xl text-brand-olive mb-2">Namma kolar mango</h1>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 font-bold">Premium Harvest • Since 1926</p>
+        </motion.div>
+      </motion.div>
+      
+      <motion.div 
+        initial={{ width: 0 }}
+        animate={{ width: "200px" }}
+        transition={{ duration: 2, ease: "easeInOut" }}
+        className="absolute bottom-24 h-[1px] bg-brand-olive/20 overflow-hidden"
+      >
+        <motion.div 
+          animate={{ x: ["-100%", "100%"] }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+          className="w-full h-full bg-brand-olive"
+        />
+      </motion.div>
+    </motion.div>
   );
 };
 
+const PullToRefresh = ({ isRefreshing }: { isRefreshing: boolean }) => (
+  <AnimatePresence>
+    {isRefreshing && (
+      <motion.div 
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: 60, opacity: 1 }}
+        exit={{ height: 0, opacity: 0 }}
+        className="flex items-center justify-center overflow-hidden"
+      >
+        <Loader2 size={20} className="text-brand-olive animate-spin" />
+      </motion.div>
+    )}
+  </AnimatePresence>
+);
+
 const Button = ({ className, variant = 'primary', ...props }: any) => {
   const variants = {
-    primary: 'bg-brand-olive text-white hover:bg-stone-700 shadow-lg shadow-brand-olive/20',
-    secondary: 'bg-white border border-brand-olive text-brand-olive hover:bg-stone-50',
-    mango: 'bg-brand-mango text-stone-900 hover:bg-brand-mango-dark shadow-lg shadow-brand-mango/30',
-    ghost: 'hover:bg-stone-100 text-stone-600',
-    danger: 'bg-red-50 text-red-600 hover:bg-red-100'
+    primary: 'bg-brand-olive text-white hover:bg-stone-700 shadow-lg shadow-brand-olive/20 hover:shadow-brand-olive/40 active:scale-95',
+    secondary: 'bg-white border border-brand-olive text-brand-olive hover:bg-stone-50 active:scale-95',
+    mango: 'bg-gradient-to-r from-brand-mango to-brand-mango-dark text-stone-900 hover:brightness-110 shadow-lg shadow-brand-mango/30 hover:shadow-brand-mango/50 active:scale-95',
+    outline: 'bg-transparent border-2 border-brand-olive text-brand-olive hover:bg-brand-olive hover:text-white active:scale-95',
+    white: 'bg-white text-brand-olive hover:bg-stone-50 shadow-xl active:scale-95',
+    ghost: 'hover:bg-stone-100 text-stone-600 active:scale-95',
+    danger: 'bg-red-50 text-red-600 hover:bg-red-100 active:scale-95'
   };
+  
+  const isPulsing = props.pulsing;
+  
   return (
-    <button 
+    <motion.button 
+      whileTap={{ scale: 0.96 }}
+      animate={isPulsing ? {
+        boxShadow: ["0 0 0 0px rgba(242, 125, 38, 0.4)", "0 0 0 20px rgba(242, 125, 38, 0)", "0 0 0 0px rgba(242, 125, 38, 0)"]
+      } : {}}
+      transition={isPulsing ? {
+        repeat: Infinity,
+        duration: 2,
+        ease: "easeInOut"
+      } : {}}
       className={cn(
-        'px-8 py-4 rounded-full transition-all active:scale-95 font-sans font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50',
+        'px-6 py-3 rounded-xl transition-all font-sans font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 text-center',
         variants[variant as keyof typeof variants],
         className
       )} 
@@ -220,7 +152,7 @@ const Button = ({ className, variant = 'primary', ...props }: any) => {
 
 const Card = ({ children, className, glass = false }: any) => (
   <div className={cn(
-    'rounded-[40px] warm-shadow p-8 transition-all duration-500', 
+    'rounded-3xl warm-shadow p-6 md:p-8 transition-all duration-500 border border-stone-100', 
     glass ? 'glass-card' : 'bg-white',
     className
   )}>
@@ -228,14 +160,149 @@ const Card = ({ children, className, glass = false }: any) => (
   </div>
 );
 
+const Sidebar = ({ view, setView, t, language, cartCount, user, onOpenAuth, onLogout }: any) => {
+  const navItems = [
+    { id: 'store', label: t.home, icon: Package },
+    { id: 'cart', label: t.basket, icon: ShoppingBasket, count: cartCount },
+    { id: 'history', label: language === 'en' ? 'Orders' : 'ಆರ್ಡರ್ಗಳು', icon: Clock },
+    { id: 'seller', label: language === 'en' ? 'Admin' : 'ನಿರ್ವಾಹಕ', icon: LayoutDashboard, adminOnly: true },
+  ];
+
+  return (
+    <aside className="hidden md:flex flex-col w-[var(--sidebar-width)] h-screen sticky top-0 bg-white border-r border-stone-100 z-50">
+      <div className="p-8">
+        <div 
+          onClick={() => { setView('store'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+          className="flex items-center gap-3 cursor-pointer group"
+        >
+          <div className="w-10 h-10 bg-brand-mango rounded-xl flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
+            <Leaf className="text-stone-900 w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="font-serif italic text-xl leading-none text-stone-900">Namma Kolar</h1>
+            <p className="text-[8px] font-sans font-bold uppercase tracking-[0.3em] mt-1 text-stone-400">Mangoes</p>
+          </div>
+        </div>
+      </div>
+
+      <nav className="flex-1 px-4 space-y-2 mt-4">
+        {navItems.map((item) => {
+          if (item.adminOnly && !user?.isSeller) return null;
+          const isActive = view === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setView(item.id)}
+              className={cn(
+                "w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all group relative",
+                isActive 
+                  ? "bg-brand-olive text-white shadow-lg shadow-brand-olive/20" 
+                  : "text-stone-400 hover:bg-stone-50 hover:text-stone-600"
+              )}
+            >
+              <item.icon className={cn("w-5 h-5 transition-transform group-hover:scale-110", isActive ? "text-white" : "text-stone-300")} />
+              <span className="font-sans font-bold text-[11px] uppercase tracking-widest">{item.label}</span>
+              {item.count > 0 && (
+                <span className={cn(
+                  "ml-auto text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold",
+                  isActive ? "bg-white text-brand-olive" : "bg-brand-mango text-stone-900"
+                )}>
+                  {item.count}
+                </span>
+              )}
+              {isActive && (
+                <motion.div 
+                  layoutId="sidebar-active"
+                  className="absolute left-0 w-1 h-6 bg-brand-mango rounded-r-full"
+                />
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="p-6 border-t border-stone-50">
+        {user ? (
+          <div className="flex items-center gap-4 p-3 rounded-2xl bg-stone-50">
+            <img src={user.photoURL || ''} className="w-10 h-10 rounded-xl" referrerPolicy="no-referrer" />
+            <div className="flex-1 min-w-0">
+              <p className="font-sans font-bold text-xs truncate">{user.displayName}</p>
+              <button 
+                onClick={onLogout}
+                className="text-[10px] font-sans font-bold uppercase tracking-widest text-red-400 hover:text-red-600 transition-colors"
+              >
+                {language === 'en' ? 'Logout' : 'ನಿರ್ಗಮಿಸಿ'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="secondary" className="w-full" onClick={onOpenAuth}>
+            <User className="w-4 h-4" />
+            {language === 'en' ? 'Login' : 'ಲಾಗಿನ್'}
+          </Button>
+        )}
+      </div>
+    </aside>
+  );
+};
+
+const TopBar = ({ language, onLanguageChange, t, searchQuery, setSearchQuery, cartCount, onOpenCart }: any) => {
+  return (
+    <header className="h-[var(--topbar-height)] bg-white/80 backdrop-blur-xl border-b border-stone-100 sticky top-0 z-40 px-8 flex items-center justify-between">
+      <div className="flex-1 max-w-xl">
+        <div className="relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-300 group-focus-within:text-brand-olive transition-colors" />
+          <input 
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={language === 'en' ? "Search varieties, harvest..." : "ಹುಡುಕಿ..."}
+            className="w-full bg-stone-50 border-none rounded-2xl pl-12 pr-4 py-3 text-sm font-sans focus:ring-2 focus:ring-brand-olive/10 outline-none transition-all"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-6 ml-8">
+        <button 
+          onClick={() => onLanguageChange(language === 'en' ? 'kn' : 'en')}
+          className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400 hover:text-brand-olive transition-colors"
+        >
+          {language === 'en' ? 'ಕನ್ನಡ' : 'English'}
+        </button>
+
+        <div className="h-6 w-px bg-stone-100" />
+
+        <button className="relative p-2 text-stone-400 hover:text-brand-olive transition-colors group">
+          <Bell className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-mango rounded-full border-2 border-white" />
+        </button>
+
+        <button 
+          onClick={onOpenCart}
+          className="md:hidden relative p-2 text-stone-400 hover:text-brand-olive transition-colors"
+        >
+          <ShoppingBasket className="w-5 h-5" />
+          {cartCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-brand-mango text-stone-900 text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+              {cartCount}
+            </span>
+          )}
+        </button>
+      </div>
+    </header>
+  );
+};
+
 // --- Views ---
 
-const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail }: any) => {
+const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast }: any) => {
   const [selectedWeight, setSelectedWeight] = useState(5);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [isReviewing, setIsReviewing] = useState(false);
-  const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
+  const [showReviews, setShowReviews] = useState(false);
+  const [newReview, setNewReview] = useState({ name: '', rating: 5, comment: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const weights = [5, 7.5, 10, 15];
 
   useEffect(() => {
@@ -253,12 +320,15 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail }: any) => 
   }, [product.id]);
 
   const handleSubmitReview = async () => {
-    if (!newReview.comment.trim()) return;
+    if (!newReview.comment.trim() || !newReview.name.trim()) {
+      showToast("Please provide your name and a comment.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const reviewData = {
         product_id: product.id,
-        name: 'Anonymous', // Simplified since auth is removed
+        name: newReview.name,
         rating: newReview.rating,
         comment: newReview.comment
       };
@@ -268,15 +338,16 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail }: any) => 
         body: JSON.stringify(reviewData)
       });
       if (res.ok) {
-        setNewReview({ rating: 5, comment: '' });
+        setNewReview({ name: '', rating: 5, comment: '' });
         setIsReviewing(false);
-        // Re-fetch reviews
         const updatedRes = await fetch(`/api/products/${product.id}/reviews`);
         const updatedData = await updatedRes.json();
         setReviews(updatedData);
+        showToast("Review submitted successfully!");
       }
     } catch (error) {
       console.error("Failed to submit review:", error);
+      showToast("Failed to submit review.");
     } finally {
       setIsSubmitting(false);
     }
@@ -292,78 +363,80 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail }: any) => 
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.8, ease: [0.21, 0.45, 0.32, 0.9] }}
+      className="group relative h-full"
     >
-      <Card className="group overflow-hidden p-0 hover:translate-y-[-12px] hover:shadow-2xl transition-all duration-700 bg-white border border-stone-100/50">
-        <div className="aspect-[4/5] overflow-hidden relative p-6">
-          <div className="w-full h-full relative">
-            <motion.div 
-              whileHover={{ scale: 1.05, rotate: 2 }}
-              className="w-full h-full leaf-mask overflow-hidden bg-stone-100"
-            >
-              <img 
-                src={product.image_url} 
-                alt={product.name}
-                className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                referrerPolicy="no-referrer"
-                loading="lazy"
-              />
-            </motion.div>
-            
-            {/* Decorative Elements */}
-            <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-brand-mango/10 rounded-full blur-2xl group-hover:bg-brand-mango/20 transition-all" />
-            <div className="absolute -top-4 -left-4 w-24 h-24 bg-brand-leaf/5 rounded-full blur-2xl group-hover:bg-brand-leaf/10 transition-all" />
-          </div>
-
-          <div className="absolute top-10 left-10">
-            <span className="bg-white/90 backdrop-blur-md px-5 py-2 rounded-full text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-brand-olive shadow-sm border border-white/50">
+      <Card className="h-full p-0 overflow-hidden bg-white border border-stone-100/50 hover:shadow-2xl transition-all duration-500 rounded-[40px] flex flex-col md:flex-row">
+        {/* Image Container */}
+        <div className="md:w-2/5 aspect-square md:aspect-auto overflow-hidden relative p-4 md:p-6 bg-stone-50/50">
+          <motion.div 
+            whileHover={{ scale: 1.05 }}
+            className="w-full h-full rounded-[24px] md:rounded-[32px] overflow-hidden bg-white shadow-inner"
+          >
+            {!imageLoaded && (
+              <div className="absolute inset-0 bg-stone-100 animate-pulse flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-brand-mango/20 border-t-brand-mango rounded-full animate-spin" />
+              </div>
+            )}
+            <motion.img 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: imageLoaded ? 1 : 0 }}
+              transition={{ duration: 0.5 }}
+              onLoad={() => setImageLoaded(true)}
+              src={product.image_url} 
+              alt={product.name}
+              className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+              referrerPolicy="no-referrer"
+              loading="lazy"
+            />
+          </motion.div>
+          
+          {/* Badges */}
+          <div className="absolute top-8 left-8 flex flex-col gap-2">
+            <span className="bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[9px] font-sans font-bold uppercase tracking-[0.2em] text-brand-olive shadow-sm border border-white/50">
               {product.variety}
             </span>
           </div>
-          {product.stock < 10 && product.available === 1 && (
-            <div className="absolute top-10 right-10">
-              <span className="bg-red-500 text-white px-5 py-2 rounded-full text-[10px] font-sans font-bold uppercase tracking-[0.2em] shadow-lg animate-pulse">
-                Limited
-              </span>
-            </div>
-          )}
-          {product.available === 0 && (
-            <div className="absolute inset-0 bg-stone-900/40 backdrop-blur-[2px] flex items-center justify-center z-20">
-              <span className="bg-white text-stone-900 px-8 py-3 rounded-full text-xs font-sans font-bold uppercase tracking-[0.3em] shadow-2xl">
-                {t.outOfStock}
-              </span>
+
+          {product.available === 1 && (
+            <div className="absolute top-8 right-8">
+              <div className="bg-brand-mango text-stone-900 p-2 rounded-full shadow-lg animate-pulse">
+                <Leaf className="w-4 h-4" />
+              </div>
             </div>
           )}
         </div>
-        <div className="p-10 pt-4">
-          <div className="flex justify-between items-start mb-8">
-            <div>
-              <h3 className="text-4xl font-serif italic leading-tight mb-2">{product.name}</h3>
-              <div className="flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-brand-mango" />
-                <span className="text-[10px] text-stone-400 font-sans uppercase tracking-[0.2em] font-bold">Harvest 2026</span>
+
+        {/* Content Container */}
+        <div className="p-6 md:p-10 flex flex-col flex-1 space-y-6">
+          <div className="space-y-2">
+            <div className="flex justify-between items-start gap-4">
+              <h3 className="text-2xl md:text-3xl font-serif italic leading-tight">{product.name}</h3>
+              <div className="flex items-center gap-1 bg-stone-50 px-2 py-1 rounded-lg">
+                <Star className="w-3 h-3 fill-brand-mango text-brand-mango" />
+                <span className="text-[10px] font-sans font-bold text-stone-600">{averageRating || '5.0'}</span>
               </div>
             </div>
-            <div className="text-right">
-              <span className="text-3xl font-serif block text-brand-olive">₹{product.price * selectedWeight}</span>
-              <span className="text-[10px] text-stone-400 font-sans uppercase tracking-[0.2em] font-bold">₹{product.price}/kg</span>
-            </div>
+            <p className="text-stone-400 text-[11px] font-sans leading-relaxed">
+              {product.description}
+            </p>
           </div>
-          
-          <div className="mb-10">
-            <div className="flex justify-between items-center mb-4">
-              <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold">{t.selectWeight}</p>
-              <span className="text-[10px] text-brand-leaf font-bold uppercase tracking-widest">{t.freeDelivery}</span>
+
+          {/* Weight Selection */}
+          <div className="space-y-4 flex-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-sans font-bold uppercase tracking-widest text-stone-400">{t.selectWeight}</span>
+              <span className="text-xl md:text-2xl font-serif italic text-brand-olive">₹{product.price * selectedWeight}</span>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               {weights.map(w => (
                 <button
                   key={w}
                   onClick={() => setSelectedWeight(w)}
                   className={cn(
-                    "px-5 py-2.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-[0.1em] transition-all border-2",
+                    "px-4 py-2 rounded-xl text-[10px] font-sans font-bold transition-all border",
                     selectedWeight === w 
-                      ? "bg-brand-olive text-white border-brand-olive shadow-lg scale-105" 
-                      : "bg-stone-50 text-stone-400 border-stone-50 hover:border-brand-olive/20 hover:text-brand-olive"
+                      ? "bg-brand-olive text-white border-brand-olive shadow-md scale-105" 
+                      : "bg-white text-stone-400 border-stone-100 hover:border-brand-olive/20"
                   )}
                 >
                   {w}kg
@@ -372,126 +445,125 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail }: any) => 
             </div>
           </div>
 
-          <p className="text-stone-500 font-sans text-sm mb-6 leading-relaxed opacity-70 italic">
-            "{product.description}"
-          </p>
+          <div className="flex gap-4 pt-4 border-t border-stone-100">
+            <Button 
+              variant="outline" 
+              className="flex-1 py-4 rounded-2xl text-[10px] uppercase tracking-widest font-bold border-stone-200 hover:bg-stone-50"
+              onClick={() => onAddToCart(product, selectedWeight)}
+            >
+              {t.addToCart}
+            </Button>
+            <Button 
+              variant="mango" 
+              className="flex-1 py-4 rounded-2xl text-[10px] uppercase tracking-widest font-bold"
+              onClick={() => onBuyNow(product, selectedWeight)}
+            >
+              {t.buyNow}
+            </Button>
+          </div>
+
+          {/* Reviews Toggle */}
+          <div className="flex justify-center">
+            <button 
+              onClick={() => setShowReviews(!showReviews)}
+              className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400 hover:text-brand-olive transition-colors flex items-center gap-2"
+            >
+              <MessageSquare className="w-3 h-3" />
+              {showReviews ? 'Hide Reviews' : `View Reviews (${reviews.length})`}
+            </button>
+          </div>
 
           {/* Reviews Section */}
-          <div className="mb-8 pt-6 border-t border-stone-100">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex items-center gap-2">
-                <h4 className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold">{t.customerReviews}</h4>
-                {averageRating && (
-                  <div className="flex items-center gap-1 bg-brand-mango/10 px-2 py-0.5 rounded-full">
-                    <Star className="w-2 h-2 fill-brand-mango text-brand-mango" />
-                    <span className="text-[10px] font-bold text-brand-mango">{averageRating}</span>
+          <AnimatePresence>
+            {showReviews && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden border-t border-stone-100 pt-6 space-y-6"
+              >
+                <div className="flex items-center justify-between">
+                  <h4 className="font-serif italic text-xl">Customer Reviews</h4>
+                  <Button 
+                    variant="ghost" 
+                    className="text-[10px] uppercase tracking-widest font-bold text-brand-olive"
+                    onClick={() => setIsReviewing(!isReviewing)}
+                  >
+                    {isReviewing ? 'Cancel' : 'Write a Review'}
+                  </Button>
+                </div>
+
+                {isReviewing && (
+                  <div className="bg-stone-50 p-4 rounded-2xl space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">Your Name</label>
+                      <input 
+                        type="text"
+                        value={newReview.name}
+                        onChange={(e) => setNewReview({...newReview, name: e.target.value})}
+                        className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-brand-mango"
+                        placeholder="Enter your name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">Rating</label>
+                      <div className="flex gap-2">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <button 
+                            key={star}
+                            onClick={() => setNewReview({...newReview, rating: star})}
+                            className="focus:outline-none"
+                          >
+                            <Star className={cn("w-6 h-6", star <= newReview.rating ? "fill-brand-mango text-brand-mango" : "text-stone-200")} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">Comment</label>
+                      <textarea 
+                        value={newReview.comment}
+                        onChange={(e) => setNewReview({...newReview, comment: e.target.value})}
+                        className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-brand-mango min-h-[80px]"
+                        placeholder="Share your experience..."
+                      />
+                    </div>
+                    <Button 
+                      variant="mango" 
+                      className="w-full py-3 text-[10px] font-bold uppercase tracking-widest"
+                      onClick={handleSubmitReview}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Submit Review'}
+                    </Button>
                   </div>
                 )}
-              </div>
-              {buyerEmail ? (
-                <button 
-                  onClick={() => setIsReviewing(!isReviewing)}
-                  className="text-[10px] text-brand-olive font-bold uppercase tracking-widest hover:underline"
-                >
-                  {isReviewing ? t.backToStore : t.writeReview}
-                </button>
-              ) : (
-                <span className="text-[8px] text-stone-300 uppercase tracking-widest">{t.loginToReview}</span>
-              )}
-            </div>
 
-            <AnimatePresence mode="wait">
-              {isReviewing ? (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-4 overflow-hidden"
-                >
-                  <div className="flex gap-2">
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <button 
-                        key={star}
-                        onClick={() => setNewReview(prev => ({ ...prev, rating: star }))}
-                        className="p-1"
-                      >
-                        <Star className={cn("w-5 h-5", star <= newReview.rating ? "fill-brand-mango text-brand-mango" : "text-stone-200")} />
-                      </button>
-                    ))}
-                  </div>
-                  <textarea 
-                    value={newReview.comment}
-                    onChange={e => setNewReview(prev => ({ ...prev, comment: e.target.value }))}
-                    placeholder={t.comment}
-                    className="w-full bg-stone-50 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-brand-mango/20 outline-none min-h-[100px]"
-                  />
-                  <Button 
-                    onClick={handleSubmitReview}
-                    disabled={isSubmitting || !newReview.comment.trim()}
-                    className="w-full py-3 text-[10px]"
-                  >
-                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t.submitReview}
-                  </Button>
-                </motion.div>
-              ) : (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="space-y-4 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar"
-                >
+                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 no-scrollbar">
                   {reviews.length === 0 ? (
-                    <p className="text-[10px] text-stone-400 italic">{t.noReviews}</p>
+                    <p className="text-stone-400 text-sm italic text-center py-4">No reviews yet. Be the first to review!</p>
                   ) : (
-                    reviews.map(review => (
-                      <div key={review.id} className="bg-stone-50/50 p-4 rounded-2xl border border-stone-100/50">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-[10px] font-bold text-brand-olive uppercase tracking-wider">{review.name}</span>
+                    reviews.map((review) => (
+                      <div key={review.id} className="border-b border-stone-50 pb-4 last:border-0">
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="font-sans font-bold text-xs text-stone-800">{review.name}</span>
                           <div className="flex gap-0.5">
-                            {[...Array(5)].map((_, i) => (
-                              <Star key={i} className={cn("w-2 h-2", i < review.rating ? "fill-brand-mango text-brand-mango" : "text-stone-200")} />
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <Star key={star} className={cn("w-2.5 h-2.5", star <= review.rating ? "fill-brand-mango text-brand-mango" : "text-stone-200")} />
                             ))}
                           </div>
                         </div>
-                        <p className="text-xs text-stone-600 leading-relaxed">{review.comment}</p>
+                        <p className="text-stone-600 text-xs leading-relaxed">{review.comment}</p>
+                        <span className="text-[9px] text-stone-300 mt-2 block">
+                          {new Date(review.created_at).toLocaleDateString()}
+                        </span>
                       </div>
                     ))
                   )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div className="mb-8 flex items-center gap-2 text-stone-400">
-            <Clock className="w-3 h-3" />
-            <span className="text-[9px] font-sans font-bold uppercase tracking-widest">{t.deliveryTime}</span>
-          </div>
-          
-          <div className="flex gap-4">
-            <Button 
-              variant="secondary"
-              disabled={product.available === 0 || product.stock < selectedWeight}
-              onClick={() => onAddToCart(product, selectedWeight)}
-              className="flex-1 py-5 group/btn overflow-hidden relative border-stone-200"
-            >
-              <span className="relative z-10 flex items-center justify-center gap-2">
-                <ShoppingBasket className="w-4 h-4" />
-                <span className="hidden sm:inline">{t.basket}</span>
-              </span>
-            </Button>
-            <Button 
-              variant="mango"
-              disabled={product.available === 0 || product.stock < selectedWeight}
-              onClick={() => onBuyNow(product, selectedWeight)}
-              className="flex-[2] py-5 group/btn overflow-hidden relative"
-            >
-              <span className="relative z-10">
-                {product.available === 0 ? t.outOfStock : (product.stock < selectedWeight ? t.outOfStock : t.buyNow)}
-              </span>
-              <motion.div 
-                className="absolute inset-0 bg-white/20 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-500"
-              />
-            </Button>
-          </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </Card>
     </motion.div>
@@ -533,9 +605,9 @@ const SkeletonCard = () => (
 
 const Testimonials = ({ t, language, testimonials }: any) => {
   return (
-    <section className="py-32 bg-stone-50 overflow-hidden">
+    <section className="py-20 md:py-32 bg-stone-50 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-24">
+        <div className="text-center mb-16 md:mb-24">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -553,13 +625,13 @@ const Testimonials = ({ t, language, testimonials }: any) => {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-5xl md:text-7xl font-serif italic text-brand-olive mb-8"
+            className="text-4xl md:text-7xl font-serif italic text-brand-olive mb-8"
           >
             {t.testimonialsSubtitle}
           </motion.h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+        <div className="flex md:grid md:grid-cols-3 gap-8 md:gap-12 overflow-x-auto md:overflow-visible pb-8 md:pb-0 no-scrollbar snap-x snap-mandatory">
           {testimonials.map((testimonial, idx) => (
             <motion.div
               key={testimonial.id}
@@ -567,35 +639,36 @@ const Testimonials = ({ t, language, testimonials }: any) => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: idx * 0.1 }}
+              className="min-w-[85vw] md:min-w-0 snap-center"
             >
-              <Card className="h-full flex flex-col justify-between hover:translate-y-[-8px] transition-all duration-500 border border-stone-100">
+              <Card className="h-full flex flex-col justify-between hover:translate-y-[-8px] transition-all duration-500 border border-stone-100 bg-white rounded-[32px] p-8">
                 <div className="space-y-6">
                   <div className="flex gap-1">
                     {[...Array(5)].map((_, i) => (
                       <Star
                         key={i}
                         className={cn(
-                          "w-4 h-4",
+                          "w-3.5 h-3.5 md:w-4 md:h-4",
                           i < testimonial.rating ? "fill-brand-mango text-brand-mango" : "text-stone-200"
                         )}
                       />
                     ))}
                   </div>
-                  <p className="text-xl font-serif italic text-stone-600 leading-relaxed">
+                  <p className="text-lg md:text-xl font-serif italic text-stone-600 leading-relaxed">
                     "{testimonial.review}"
                   </p>
                 </div>
-                <div className="mt-10 pt-8 border-t border-stone-100 flex justify-between items-center">
+                <div className="mt-8 md:mt-10 pt-6 md:pt-8 border-t border-stone-100 flex justify-between items-center">
                   <div>
-                    <p className="font-sans font-bold text-xs uppercase tracking-widest text-brand-olive">
+                    <p className="font-sans font-bold text-[10px] md:text-xs uppercase tracking-widest text-brand-olive">
                       {testimonial.name}
                     </p>
-                    <p className="text-[10px] font-sans uppercase tracking-widest text-stone-400 mt-1">
+                    <p className="text-[9px] md:text-[10px] font-sans uppercase tracking-widest text-stone-400 mt-1">
                       {testimonial.date}
                     </p>
                   </div>
-                  <div className="w-10 h-10 rounded-full bg-brand-mango/10 flex items-center justify-center">
-                    <CheckCircle2 className="w-5 h-5 text-brand-mango" />
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-brand-mango/10 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-brand-mango" />
                   </div>
                 </div>
               </Card>
@@ -608,114 +681,6 @@ const Testimonials = ({ t, language, testimonials }: any) => {
 };
 
 // --- Components ---
-
-const Header = ({ onOpenCart, cartCount, onOpenAuth, onOpenHistory, setView, t, language, onLanguageChange, user, handleLogin, handleLogout }: any) => {
-  const [isScrolled, setIsScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  return (
-    <motion.header 
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-500 px-6 py-4",
-        isScrolled ? "bg-white/80 backdrop-blur-lg shadow-lg" : "bg-transparent"
-      )}
-    >
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        <div 
-          onClick={() => { setView('store'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-          className="flex items-center gap-3 cursor-pointer group"
-        >
-          <div className="w-10 h-10 bg-brand-mango rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform">
-            <ShoppingBasket className="w-6 h-6 text-stone-900" />
-          </div>
-          <div className="hidden sm:block">
-            <h1 className={cn("font-serif italic text-xl leading-none", isScrolled ? "text-stone-900" : "text-white")}>Namma Kolar</h1>
-            <p className={cn("text-[8px] font-sans font-bold uppercase tracking-[0.3em] mt-1", isScrolled ? "text-stone-400" : "text-white/40")}>Mangoes</p>
-          </div>
-        </div>
-
-        <nav className="hidden md:flex items-center gap-10">
-          {[
-            { id: 'heritage', label: t.ourStory },
-            { id: 'products', label: t.shopHarvest },
-            { id: 'visit', label: t.visitOurFarm },
-            { id: 'history', label: t.trackOrder }
-          ].map(item => (
-            <button 
-              key={item.id}
-              onClick={() => {
-                setView('store');
-                setTimeout(() => {
-                  const el = document.getElementById(item.id);
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
-              }}
-              className={cn(
-                "text-[10px] font-sans font-bold uppercase tracking-[0.3em] hover:text-brand-mango transition-colors",
-                isScrolled ? "text-stone-500" : "text-white/70"
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => onLanguageChange(language === 'en' ? 'kn' : 'en')}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-[10px] font-sans font-bold uppercase tracking-widest transition-all",
-              isScrolled ? "bg-stone-100 text-stone-600 hover:bg-stone-200" : "bg-white/10 text-white hover:bg-white/20"
-            )}
-          >
-            {language === 'en' ? 'ಕನ್ನಡ' : 'English'}
-          </button>
-          
-          <div className="h-6 w-px bg-stone-200/20 mx-2" />
-
-          <button 
-            onClick={user ? handleLogout : handleLogin}
-            className={cn(
-              "p-2.5 rounded-full transition-all hover:scale-110 flex items-center gap-2",
-              isScrolled ? "bg-stone-100 text-stone-600 hover:bg-stone-200" : "bg-white/10 text-white hover:bg-white/20"
-            )}
-          >
-            {user ? (
-              <>
-                <img src={user.photoURL || ''} className="w-5 h-5 rounded-full" referrerPolicy="no-referrer" />
-                <span className="text-[10px] font-bold hidden sm:inline">{user.displayName}</span>
-              </>
-            ) : (
-              <User className="w-5 h-5" />
-            )}
-          </button>
-
-          <button 
-            onClick={onOpenCart}
-            className={cn(
-              "relative p-2.5 rounded-full transition-all hover:scale-110",
-              isScrolled ? "bg-brand-mango text-stone-900" : "bg-white text-brand-olive"
-            )}
-          >
-            <ShoppingBasket className="w-5 h-5" />
-            {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-stone-900 text-white text-[8px] w-5 h-5 rounded-full flex items-center justify-center font-sans font-bold shadow-lg">
-                {cartCount}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
-    </motion.header>
-  );
-};
 
 const Footer = ({ t, language, onOpenHistory, onOpenAuth }: any) => (
   <footer className="bg-brand-olive text-white pt-32 pb-48 md:pb-32">
@@ -790,12 +755,26 @@ const Storefront = ({
   t, 
   language, 
   onLanguageChange, 
-  buyerEmail 
+  buyerEmail,
+  onRefresh,
+  showToast
 }: any) => {
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const categories = ['All', 'Premium', 'Popular', 'Organic', 'Export Quality'];
+
+  const finalFilteredProducts = filteredProducts.filter((p: any) => {
+    if (selectedCategory === 'All') return true;
+    return p.variety?.toLowerCase().includes(selectedCategory.toLowerCase()) || 
+           p.description?.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+           p.name?.toLowerCase().includes(selectedCategory.toLowerCase());
+  });
+
+  const featuredProducts = products.filter((p: any) => p.available === 1).slice(0, 3);
+
   return (
-    <div className="min-h-screen pb-0">
-      {/* Hero Section */}
-      <section id="home" className="relative h-[90vh] md:h-screen flex items-center justify-center overflow-hidden bg-brand-olive">
+    <div className="relative min-h-screen bg-stone-50/30">
+      {/* Hero Section - More compact for web app feel */}
+      <section id="home" className="relative h-[60vh] md:h-[70vh] flex items-center justify-center overflow-hidden bg-brand-olive rounded-b-[60px] md:rounded-b-[100px] shadow-2xl">
         <motion.div 
           key={heroBg}
           initial={{ scale: 1.1, opacity: 0 }}
@@ -811,65 +790,39 @@ const Storefront = ({
           />
         </motion.div>
 
-        <div className="absolute top-10 right-10 z-30 flex items-center gap-4">
-          <div className="hidden md:block">
-            <button 
-              onClick={() => {
-                const newUrl = prompt(t.changeBackground + ':', heroBg);
-                if (newUrl && newUrl.trim() !== '') onHeroBgChange(newUrl);
-              }}
-              className="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full text-[10px] font-sans font-bold uppercase tracking-widest text-white hover:bg-white/20 transition-all"
-            >
-              <Settings className="w-3 h-3" />
-              {t.changeBackground}
-            </button>
-          </div>
-        </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-olive/40 via-transparent to-brand-olive/60 z-[1]" />
         
-        {/* Floating Elements */}
-        <motion.div 
-          animate={{ 
-            y: [0, -20, 0],
-            rotate: [0, 5, 0]
-          }}
-          transition={{ repeat: Infinity, duration: 8, ease: "easeInOut" }}
-          className="absolute top-1/4 -left-20 w-64 h-64 opacity-20 hidden md:block"
-        >
-          <img src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" className="w-full h-full object-contain leaf-mask" referrerPolicy="no-referrer" loading="lazy" />
-        </motion.div>
-
-        <div className="relative z-10 text-center px-6 max-w-6xl">
+        <div className="relative z-10 text-center px-6 max-w-6xl mx-auto">
           <motion.div
-            initial={{ y: 20, opacity: 0, filter: 'blur(10px)', scale: 0.95 }}
-            animate={{ y: 0, opacity: 1, filter: 'blur(0px)', scale: 1 }}
-            transition={{ delay: 0.5, duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-            className="flex items-center justify-center gap-4 mb-10"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5, duration: 1 }}
+            className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 px-6 py-2 rounded-full mb-8"
           >
-            <div className="h-px w-12 bg-brand-mango/50" />
-            <span className="text-brand-mango text-[10px] font-sans font-bold uppercase tracking-[0.4em]">
+            <div className="w-2 h-2 bg-brand-mango rounded-full animate-pulse" />
+            <span className="text-white text-[10px] font-sans font-bold uppercase tracking-[0.3em]">
               {t.harvestAvailable}
             </span>
-            <div className="h-px w-12 bg-brand-mango/50" />
           </motion.div>
 
           <motion.h1 
-            initial={{ y: 30, opacity: 0, filter: 'blur(20px)', scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, filter: 'blur(0px)', scale: 1 }}
-            transition={{ delay: 0.7, duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
-            className="text-7xl md:text-[12rem] text-white font-serif mb-10 italic leading-[0.8] tracking-tighter"
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.7, duration: 1.2 }}
+            className="text-6xl md:text-[8rem] text-white font-serif mb-8 italic leading-[0.8] tracking-tighter"
           >
             {language === 'en' ? (
-              <>Namma <br className="md:hidden" /> <span className="text-brand-mango">Kolar</span> <br /> Mangoes</>
+              <>Namma <span className="text-brand-mango">Kolar</span> <br /> Mangoes</>
             ) : (
-              <>ನಮ್ಮ <br className="md:hidden" /> <span className="text-brand-mango">ಕೋಲಾರ</span> <br /> ಮಾವು</>
+              <>ನಮ್ಮ <span className="text-brand-mango">ಕೋಲಾರ</span> <br /> ಮಾವು</>
             )}
           </motion.h1>
 
           <motion.p 
-            initial={{ y: 20, opacity: 0, filter: 'blur(10px)' }}
-            animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
-            transition={{ delay: 1, duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-            className="text-xl md:text-3xl text-white/70 font-serif italic max-w-3xl mx-auto mb-16 leading-relaxed"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 1, duration: 1 }}
+            className="text-base md:text-xl text-white/80 font-serif italic max-w-2xl mx-auto mb-12 leading-relaxed"
           >
             {t.heroSubtitle}
           </motion.p>
@@ -877,59 +830,128 @@ const Storefront = ({
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 1.3, duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col md:flex-row items-center justify-center gap-8"
+            transition={{ delay: 1.2 }}
+            className="flex flex-col sm:flex-row items-center justify-center gap-8"
           >
             <Button 
               variant="mango" 
-              className="px-16 py-7 text-sm group"
+              className="w-full sm:w-auto px-12 py-6 text-xs rounded-2xl shadow-2xl shadow-brand-mango/40 font-bold uppercase tracking-[0.2em]"
               onClick={() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })}
             >
               {t.exploreHarvest}
-              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              <ChevronRight className="w-5 h-5 ml-3" />
             </Button>
-            <button 
-              onClick={() => document.getElementById('heritage')?.scrollIntoView({ behavior: 'smooth' })}
-              className="text-white/60 font-sans text-[10px] uppercase tracking-[0.3em] font-bold hover:text-brand-mango transition-colors border-b border-white/20 pb-1"
-            >
-              {t.ourHeritage}
-            </button>
           </motion.div>
         </div>
-
-        {/* Scroll Indicator */}
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 2 }}
-          className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4"
-        >
-          <motion.div 
-            animate={{ y: [0, 10, 0] }}
-            transition={{ repeat: Infinity, duration: 2 }}
-            className="w-[1px] h-20 bg-gradient-to-b from-brand-mango to-transparent" 
-          />
-        </motion.div>
       </section>
 
-      {/* Offers Marquee */}
-      {offers.filter((o: any) => o.active).length > 0 && (
-        <section className="bg-brand-mango py-8 overflow-hidden whitespace-nowrap relative z-20 shadow-xl">
-          <div className="flex animate-marquee gap-32 items-center">
-            {[...offers.filter((o: any) => o.active), ...offers.filter((o: any) => o.active), ...offers.filter((o: any) => o.active)].map((offer, i) => (
-              <div key={i} className="flex items-center gap-8 text-stone-900 font-sans text-[11px] font-bold uppercase tracking-[0.3em]">
-                <ShoppingBasket className="w-5 h-5" />
-                <span>{offer.title}: {offer.description}</span>
-                <span className="bg-stone-900 text-white px-4 py-1 rounded-full text-[9px]">Code: {offer.code}</span>
+      <div className="max-w-7xl mx-auto px-6 -mt-20 relative z-20">
+        {/* Featured Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-24">
+          {featuredProducts.map((product: any, idx: number) => (
+            <motion.div
+              key={product.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.1 }}
+              className="bg-white/80 backdrop-blur-xl p-8 rounded-[40px] border border-white/50 shadow-xl flex items-center gap-6 group cursor-pointer hover:bg-white transition-all"
+              onClick={() => document.getElementById(`product-${product.id}`)?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-stone-100 flex-shrink-0">
+                <img src={product.image_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
               </div>
-            ))}
+              <div>
+                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-brand-mango mb-1">Featured</p>
+                <h4 className="text-xl font-serif italic text-stone-800">{product.name}</h4>
+                <p className="text-xs text-stone-400 font-sans">₹{product.price}/kg</p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Main Content Area */}
+        <div className="flex flex-col lg:flex-row gap-12">
+          {/* Sidebar Filters (Desktop) */}
+          <div className="hidden lg:block w-64 flex-shrink-0 space-y-12">
+            <div className="space-y-6">
+              <h3 className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-stone-400">Categories</h3>
+              <div className="flex flex-col gap-2">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={cn(
+                      "flex items-center justify-between px-6 py-4 rounded-2xl text-[11px] font-sans font-bold uppercase tracking-widest transition-all text-left",
+                      selectedCategory === cat 
+                        ? "bg-brand-olive text-white shadow-lg shadow-brand-olive/20" 
+                        : "bg-white text-stone-500 hover:bg-stone-100 border border-stone-100"
+                    )}
+                  >
+                    {cat}
+                    {selectedCategory === cat && <ChevronRight className="w-4 h-4" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-8 bg-brand-mango/10 rounded-[40px] border border-brand-mango/20 space-y-6">
+              <div className="w-12 h-12 bg-brand-mango rounded-2xl flex items-center justify-center text-stone-900">
+                <Leaf className="w-6 h-6" />
+              </div>
+              <h4 className="text-xl font-serif italic text-stone-800">100% Organic</h4>
+              <p className="text-xs text-stone-500 leading-relaxed font-sans">
+                All our mangoes are grown using traditional organic methods in Kolar.
+              </p>
+            </div>
           </div>
-        </section>
-      )}
+
+          {/* Product Grid Area */}
+          <div className="flex-1 space-y-12">
+            {/* Mobile Categories */}
+            <div className="lg:hidden flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={cn(
+                    "flex-shrink-0 px-6 py-3 rounded-xl text-[10px] font-sans font-bold uppercase tracking-widest transition-all",
+                    selectedCategory === cat 
+                      ? "bg-brand-olive text-white shadow-lg shadow-brand-olive/20" 
+                      : "bg-white text-stone-400 border border-stone-100"
+                  )}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            <div id="products" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-8 md:gap-12">
+              {isLoading ? (
+                [1, 2, 3, 4].map(i => <SkeletonCard key={i} />)
+              ) : (
+                finalFilteredProducts.map((product: Product) => (
+                  <div key={product.id} id={`product-${product.id}`}>
+                    <ProductCard product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} buyerEmail={buyerEmail} showToast={showToast} />
+                  </div>
+                ))
+              )}
+            </div>
+            
+            {!isLoading && finalFilteredProducts.length === 0 && (
+              <div className="text-center py-32 bg-white rounded-[60px] border border-stone-100">
+                <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Search className="w-8 h-8 text-stone-300" />
+                </div>
+                <p className="text-stone-500 font-serif italic text-xl">{t.noProductsFound}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Heritage Section */}
-      <section id="heritage" className="py-32 md:py-64 bg-white overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-24 items-center">
+      <section id="heritage" className="py-24 md:py-48 bg-white overflow-hidden mt-32">
+        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-20 md:gap-32 items-center">
           <div className="relative">
             <motion.div 
               initial={{ opacity: 0, x: -50 }}
@@ -939,7 +961,7 @@ const Storefront = ({
             >
               <img 
                 src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=1200" 
-                className="rounded-[60px] warm-shadow w-full aspect-[4/5] object-cover"
+                className="rounded-[40px] md:rounded-[60px] warm-shadow w-full aspect-[4/5] object-cover"
                 alt="Orchard Heritage"
                 referrerPolicy="no-referrer"
                 loading="lazy"
@@ -953,35 +975,35 @@ const Storefront = ({
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ delay: 0.3 }}
-              className="absolute -bottom-10 -right-10 bg-brand-olive p-10 rounded-[40px] text-white warm-shadow hidden md:block"
+              className="absolute -bottom-6 -right-6 md:-bottom-10 md:-right-10 bg-brand-olive p-6 md:p-10 rounded-[32px] md:rounded-[40px] text-white warm-shadow"
             >
-              <p className="text-5xl font-serif italic mb-2">40+</p>
-              <p className="text-[10px] font-sans font-bold uppercase tracking-widest opacity-60">{t.yearsOfExcellence}</p>
+              <p className="text-4xl md:text-5xl font-serif italic mb-1 md:mb-2">40+</p>
+              <p className="text-[8px] md:text-[10px] font-sans font-bold uppercase tracking-widest opacity-60">{t.yearsOfExcellence}</p>
             </motion.div>
           </div>
 
-          <div className="space-y-10">
+          <div className="space-y-8 md:space-y-10">
             <div className="space-y-4">
               <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em]">{t.ourStory}</span>
-              <h2 className="text-6xl md:text-8xl font-serif italic leading-tight">{language === 'en' ? 'Grown with' : 'ಸಂಪ್ರದಾಯದೊಂದಿಗೆ'} <br /> <span className="text-brand-mango">{language === 'en' ? 'Tradition' : 'ಬೆಳೆದಿದೆ'}</span></h2>
+              <h2 className="text-5xl md:text-8xl font-serif italic leading-tight">{language === 'en' ? 'Grown with' : 'ಸಂಪ್ರದಾಯದೊಂದಿಗೆ'} <br /> <span className="text-brand-mango">{language === 'en' ? 'Tradition' : 'ಬೆಳೆದಿದೆ'}</span></h2>
             </div>
-            <p className="text-xl text-stone-500 font-serif italic leading-relaxed">
+            <p className="text-lg md:text-xl text-stone-500 font-serif italic leading-relaxed">
               {t.farmDescription}
             </p>
-            <div className="grid grid-cols-2 gap-12 pt-8">
+            <div className="grid grid-cols-2 gap-8 md:gap-12 pt-4 md:pt-8">
               <div className="space-y-2">
-                <p className="text-3xl font-serif italic text-brand-olive">100%</p>
-                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">{t.organicMethods}</p>
+                <p className="text-2xl md:text-3xl font-serif italic text-brand-olive">100%</p>
+                <p className="text-[9px] md:text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">{t.organicMethods}</p>
               </div>
               <div className="space-y-2">
-                <p className="text-3xl font-serif italic text-brand-olive">{language === 'en' ? 'Direct' : 'ನೇರ'}</p>
-                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">{t.farmToHome}</p>
+                <p className="text-2xl md:text-3xl font-serif italic text-brand-olive">{language === 'en' ? 'Direct' : 'ನೇರ'}</p>
+                <p className="text-[9px] md:text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">{t.farmToHome}</p>
               </div>
             </div>
-            <div className="pt-8">
+            <div className="pt-4 md:pt-8">
               <Button 
                 variant="outline" 
-                className="px-12 py-5 text-xs border-brand-olive/20 text-brand-olive hover:bg-brand-olive hover:text-white"
+                className="px-10 py-5 text-[10px] md:text-xs border-brand-olive/20 text-brand-olive hover:bg-brand-olive hover:text-white rounded-full"
                 onClick={() => document.getElementById('visit')?.scrollIntoView({ behavior: 'smooth' })}
               >
                 {t.planVisit}
@@ -992,13 +1014,13 @@ const Storefront = ({
       </section>
 
       {/* Product Grid */}
-      <section id="products" className="max-w-7xl mx-auto px-6 py-32 md:py-48">
-        <div className="flex flex-col md:flex-row items-end justify-between mb-32 gap-12">
-          <div className="max-w-2xl">
+      <section id="products" className="max-w-7xl mx-auto px-6 py-24 md:py-48">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-20 md:mb-40 gap-12 md:gap-16">
+          <div className="max-w-2xl text-left">
             <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em] mb-6 block">
               {t.theCollection}
             </span>
-            <h2 className="text-6xl md:text-9xl font-serif italic leading-[0.9] tracking-tighter">
+            <h2 className="text-6xl md:text-9xl font-serif italic leading-[0.85] tracking-tighter">
               {language === 'en' ? 'The Varieties' : 'ಕೋಲಾರದ ವಿವಿಧ'} <br /> 
               {language === 'en' ? 'of Kolar' : 'ತಳಿಗಳು'}
             </h2>
@@ -1007,51 +1029,35 @@ const Storefront = ({
             </p>
             
             {/* Search Bar */}
-            <div className="mt-12 relative max-w-md">
+            <div className="mt-12 relative max-w-md group">
               <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-stone-400" />
+                <Search className="h-5 w-5 text-stone-400 group-focus-within:text-brand-mango transition-colors" />
               </div>
               <input
                 type="text"
+                placeholder={t.searchVariety}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t.searchPlaceholder}
-                className="block w-full pl-14 pr-6 py-4 bg-white border border-stone-100 rounded-full warm-shadow focus:ring-2 focus:ring-brand-mango/20 outline-none text-sm font-sans transition-all placeholder:text-stone-300"
+                className="w-full bg-stone-50/50 border-2 border-stone-50 rounded-full pl-14 pr-8 py-5 font-sans text-sm focus:border-brand-mango focus:bg-white focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all shadow-sm"
               />
             </div>
           </div>
-          <div className="flex gap-6">
-            <button onClick={onOpenHistory} className="p-5 bg-white rounded-full warm-shadow hover:bg-stone-50 transition-all hover:scale-110 group">
-              <Clock className="w-7 h-7 text-brand-olive group-hover:rotate-12 transition-transform" />
-            </button>
-            <button onClick={onOpenAuth} className="p-5 bg-white rounded-full warm-shadow hover:bg-stone-50 transition-all hover:scale-110 group">
-              <User className="w-7 h-7 text-brand-olive group-hover:rotate-12 transition-transform" />
-            </button>
-            <button onClick={onOpenCart} className="relative p-5 bg-white rounded-full warm-shadow hover:bg-stone-50 transition-all hover:scale-110 group">
-              <ShoppingBasket className="w-7 h-7 text-brand-olive group-hover:rotate-12 transition-transform" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-brand-mango text-stone-900 text-[10px] w-7 h-7 rounded-full flex items-center justify-center font-sans font-bold shadow-lg mango-glow animate-bounce">
-                  {cartCount}
-                </span>
-              )}
-            </button>
-          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16 md:gap-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
           {isLoading ? (
             [1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)
           ) : (
-            filteredProducts.map((product: Product) => (
-              <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} buyerEmail={buyerEmail} />
+            finalFilteredProducts.map((product: Product) => (
+              <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} buyerEmail={buyerEmail} showToast={showToast} />
             ))
           )}
         </div>
         
-        {!isLoading && filteredProducts.length === 0 && (
-          <div className="text-center py-20">
+        {!isLoading && finalFilteredProducts.length === 0 && (
+          <div className="text-center py-32">
             <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Search className="w-10 h-10 text-stone-300" />
+              <Search className="w-8 h-8 text-stone-300" />
             </div>
             <p className="text-stone-500 font-serif italic text-xl">{t.noProductsFound}</p>
           </div>
@@ -1179,31 +1185,31 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("max-w-4xl mx-auto", !isSection && "px-6 py-12 md:py-32")}
+      className={cn("max-w-4xl mx-auto", !isSection && "px-6 py-8 md:px-6 md:py-32")}
     >
       {!isSection && (
-        <button onClick={onBack} className="flex items-center gap-3 text-stone-400 mb-12 hover:text-brand-olive transition-all group">
-          <div className="p-2 bg-white rounded-full warm-shadow group-hover:scale-110 transition-all">
+        <button onClick={onBack} className="flex items-center gap-3 text-stone-400 mb-8 md:mb-12 hover:text-brand-olive transition-all group">
+          <div className="p-2 bg-white rounded-full shadow-sm border border-stone-100 group-hover:scale-110 transition-all">
             <ArrowLeft className="w-4 h-4" />
           </div>
           <span className="font-sans text-[10px] font-bold uppercase tracking-widest">{t.backToStore}</span>
         </button>
       )}
 
-      <div className="mb-12">
-        <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em] mb-4 block">{language === 'en' ? 'Track Your' : 'ನಿಮ್ಮ ಆರ್ಡರ್'}</span>
-        <h2 className="text-5xl md:text-7xl font-serif italic leading-tight">{language === 'en' ? 'Order' : 'ಆರ್ಡರ್'} <br />{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</h2>
+      <div className="mb-8 md:mb-12">
+        <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em] mb-3 md:mb-4 block">{language === 'en' ? 'Track Your' : 'ನಿಮ್ಮ ಆರ್ಡರ್'}</span>
+        <h2 className="text-4xl md:text-7xl font-serif italic leading-tight">{language === 'en' ? 'Order' : 'ಆರ್ಡರ್'} <br />{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</h2>
       </div>
 
-      <Card className="mb-16 p-8 md:p-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+      <Card className="mb-12 md:mb-16 p-6 md:p-10 bg-white/80 backdrop-blur-sm border-stone-100">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 mb-8">
           <div className="space-y-3">
             <label className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold">{t.emailAddress}</label>
             <input 
               type="email" 
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full bg-stone-50 border-2 border-stone-50 rounded-[24px] px-8 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
+              className="w-full bg-stone-50/50 border-2 border-stone-50 rounded-[20px] px-6 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
               placeholder="your@email.com"
             />
           </div>
@@ -1213,12 +1219,12 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
               type="tel" 
               value={phone}
               onChange={e => setPhone(e.target.value)}
-              className="w-full bg-stone-50 border-2 border-stone-50 rounded-[24px] px-8 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
+              className="w-full bg-stone-50/50 border-2 border-stone-50 rounded-[20px] px-6 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
               placeholder="+91 97430 25459 / 91645 02728"
             />
           </div>
         </div>
-        <Button variant="mango" onClick={() => fetchHistory()} disabled={loading || (!email && !phone)} className="w-full py-5">
+        <Button variant="mango" onClick={() => fetchHistory()} disabled={loading || (!email && !phone)} className="w-full py-5 rounded-[20px]">
           {loading ? (language === 'en' ? 'Searching...' : 'ಹುಡುಕಲಾಗುತ್ತಿದೆ...') : t.findMyOrders}
         </Button>
       </Card>
@@ -1374,7 +1380,7 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
   );
 };
 
-const CartDrawer = ({ isOpen, onClose, items, onUpdateQuantity, onRemove, onCheckout, onApplyPromo, appliedOffer, t, language }: any) => {
+const CartPage = ({ items, onUpdateQuantity, onRemove, onCheckout, onApplyPromo, appliedOffer, t, language, onBack }: any) => {
   const subtotal = items.reduce((sum: number, item: any) => sum + item.price * item.selectedWeight * item.quantity, 0);
   const discount = appliedOffer ? (subtotal * appliedOffer.discount_percent) / 100 : 0;
   const totalWeight = items.reduce((sum: number, item: any) => sum + item.selectedWeight * item.quantity, 0);
@@ -1383,188 +1389,168 @@ const CartDrawer = ({ isOpen, onClose, items, onUpdateQuantity, onRemove, onChec
   const [promoCode, setPromoCode] = useState('');
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-stone-900/40 backdrop-blur-sm z-50"
-          />
-          <motion.div 
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-brand-cream z-50 shadow-2xl flex flex-col"
+    <div className="min-h-screen bg-stone-50/50 pb-32">
+      <div className="max-w-3xl mx-auto px-6 py-12">
+        <div className="flex items-center justify-between mb-12">
+          <motion.button 
+            whileTap={{ scale: 0.9 }}
+            onClick={onBack}
+            className="p-4 bg-white rounded-2xl shadow-sm border border-stone-100"
           >
-            <div className="p-8 md:p-10 border-b border-stone-200 flex items-center justify-between bg-white">
-              <h2 className="text-3xl md:text-4xl font-serif italic">{t.yourBasket}</h2>
-              <button onClick={onClose} className="p-3 hover:bg-stone-100 rounded-full transition-all hover:rotate-90">
-                <X className="w-6 h-6" />
-              </button>
+            <ChevronLeft className="w-6 h-6" />
+          </motion.button>
+          <div className="text-center flex-1">
+            <h2 className="text-4xl font-serif italic">{t.yourBasket}</h2>
+            <p className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-stone-400 mt-2">{items.length} {t.items}</p>
+          </div>
+          <div className="w-14" /> {/* Spacer */}
+        </div>
+
+        {items.length === 0 ? (
+          <div className="text-center py-32 bg-white rounded-[40px] border border-stone-100 shadow-sm">
+            <div className="w-24 h-24 bg-brand-mango/10 rounded-full flex items-center justify-center mx-auto mb-8">
+              <ShoppingBasket className="w-12 h-12 text-brand-mango" />
+            </div>
+            <p className="text-stone-500 font-serif italic text-2xl mb-8">{t.emptyBasket}</p>
+            <Button onClick={onBack} variant="mango" className="rounded-2xl px-12 py-6">
+              {t.startShopping}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            <div className="bg-white rounded-[40px] p-8 md:p-12 border border-stone-100 shadow-sm space-y-10">
+              {items.map((item: CartItem) => (
+                <motion.div 
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={`${item.id}-${item.selectedWeight}`} 
+                  className="flex gap-6 md:gap-8 group"
+                >
+                  <div className="relative flex-shrink-0">
+                    <img 
+                      src={item.image_url} 
+                      alt={item.name} 
+                      className="w-24 h-24 md:w-32 md:h-32 rounded-[24px] md:rounded-[32px] object-cover shadow-lg group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                      loading="lazy"
+                    />
+                    <div className="absolute -top-2 -right-2 bg-brand-mango text-stone-900 text-[10px] w-7 h-7 rounded-full flex items-center justify-center font-sans font-black shadow-lg border-2 border-white">
+                      {item.quantity}
+                    </div>
+                  </div>
+                  <div className="flex-1 py-1">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-serif text-xl md:text-2xl italic leading-tight">{item.name}</h4>
+                      <motion.button 
+                        whileTap={{ scale: 0.8 }}
+                        onClick={() => onRemove(item.id, item.selectedWeight)}
+                        className="p-2 text-stone-300 hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </motion.button>
+                    </div>
+                    <p className="text-stone-400 text-[9px] md:text-[10px] font-sans font-bold uppercase tracking-widest mb-4 md:mb-6">₹{item.price} / kg • {item.selectedWeight}kg pack</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center bg-stone-50 rounded-xl p-1 border border-stone-100">
+                        <motion.button 
+                          whileTap={{ scale: 0.8 }}
+                          onClick={() => onUpdateQuantity(item.id, item.selectedWeight, item.quantity - 1)}
+                          className="p-2 hover:bg-white rounded-lg transition-all shadow-sm disabled:opacity-30"
+                          disabled={item.quantity <= 1}
+                        >
+                          <Minus className="w-3 h-3 md:w-4 md:h-4" />
+                        </motion.button>
+                        <span className="font-sans text-xs md:text-sm font-bold w-8 md:w-10 text-center">{item.quantity}</span>
+                        <motion.button 
+                          whileTap={{ scale: 0.8 }}
+                          onClick={() => onUpdateQuantity(item.id, item.selectedWeight, item.quantity + 1)}
+                          className="p-2 hover:bg-white rounded-lg transition-all shadow-sm"
+                        >
+                          <Plus className="w-3 h-3 md:w-4 md:h-4" />
+                        </motion.button>
+                      </div>
+                      <span className="font-serif text-xl md:text-2xl italic text-brand-olive">₹{item.price * item.selectedWeight * item.quantity}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 md:p-10 space-y-8">
-              {items.length === 0 ? (
-                <div className="text-center py-24">
-                  <div className="w-20 h-20 bg-stone-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <ShoppingBasket className="w-10 h-10 text-stone-300" />
-                  </div>
-                  <p className="text-stone-500 font-serif italic text-xl">{t.emptyBasket}</p>
-                  <button onClick={onClose} className="mt-6 text-brand-olive font-sans text-[10px] font-bold uppercase tracking-widest border-b-2 border-brand-olive/20 hover:border-brand-olive transition-all">
-                    {t.startShopping}
-                  </button>
+            <div className="bg-white rounded-[40px] p-8 md:p-12 border border-stone-100 shadow-sm space-y-8">
+              <div className="space-y-4">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold">{language === 'en' ? 'Promo Code' : 'ಪ್ರೋಮೋ ಕೋಡ್'}</p>
+                <div className="flex gap-4">
+                  <input 
+                    type="text" 
+                    value={promoCode}
+                    onChange={e => setPromoCode(e.target.value)}
+                    className="flex-1 bg-stone-50 border border-stone-100 rounded-2xl px-6 py-4 font-sans text-xs font-bold uppercase tracking-widest outline-none focus:border-brand-mango focus:bg-white transition-all"
+                    placeholder={language === 'en' ? 'Enter code' : 'ಕೋಡ್ ಹಾಕಿ'}
+                  />
+                  <Button 
+                    variant="secondary" 
+                    className="px-8 rounded-2xl"
+                    onClick={() => {
+                      if (onApplyPromo(promoCode)) {
+                        setPromoCode('');
+                      } else {
+                        alert(language === 'en' ? 'Invalid or inactive promo code' : 'ತಪ್ಪಾದ ಅಥವಾ ನಿಷ್ಕ್ರಿಯ ಪ್ರೋಮೋ ಕೋಡ್');
+                      }
+                    }}
+                  >
+                    {language === 'en' ? 'Apply' : 'ಅನ್ವಯಿಸು'}
+                  </Button>
                 </div>
-              ) : (
-                <>
-                  <div className="space-y-8">
-                    {items.map((item: CartItem) => (
-                      <motion.div 
-                        layout
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        key={`${item.id}-${item.selectedWeight}`} 
-                        className="flex gap-6"
-                      >
-                        <div className="relative">
-                          <img 
-                            src={item.image_url} 
-                            alt={item.name} 
-                            className="w-24 h-24 rounded-[24px] object-cover shadow-md"
-                            referrerPolicy="no-referrer"
-                            loading="lazy"
-                          />
-                          <span className="absolute -top-2 -right-2 bg-brand-olive text-white text-[10px] w-6 h-6 rounded-full flex items-center justify-center font-sans font-bold shadow-lg">
-                            {item.quantity}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex justify-between items-start mb-1">
-                            <h4 className="font-serif text-xl italic leading-tight">{item.name}</h4>
-                            <button 
-                              onClick={() => onRemove(item.id, item.selectedWeight)}
-                              className="p-1 text-stone-300 hover:text-red-400 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <p className="text-stone-400 text-[10px] font-sans font-bold uppercase tracking-widest mb-4">₹{item.price} / kg • {item.selectedWeight}kg pack</p>
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center bg-stone-100 rounded-full p-1">
-                              <button 
-                                onClick={() => onUpdateQuantity(item.id, item.selectedWeight, item.quantity - 1)}
-                                className="p-1.5 hover:bg-white rounded-full transition-all shadow-sm disabled:opacity-30"
-                                disabled={item.quantity <= 1}
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                              <span className="font-sans text-xs font-bold w-8 text-center">{item.quantity}</span>
-                              <button 
-                                onClick={() => onUpdateQuantity(item.id, item.selectedWeight, item.quantity + 1)}
-                                className="p-1.5 hover:bg-white rounded-full transition-all shadow-sm"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </button>
-                            </div>
-                            <span className="ml-auto font-serif text-lg italic text-brand-olive">₹{item.price * item.selectedWeight * item.quantity}</span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                  
-                  <div className="pt-8 border-t border-stone-200">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold mb-4">{language === 'en' ? 'Promo Code' : 'ಪ್ರೋಮೋ ಕೋಡ್'}</p>
-                    <div className="flex gap-3">
-                      <input 
-                        type="text" 
-                        value={promoCode}
-                        onChange={e => setPromoCode(e.target.value)}
-                        className="flex-1 bg-white border-2 border-stone-100 rounded-2xl px-6 py-3 font-sans text-xs font-bold uppercase tracking-widest outline-none focus:border-brand-mango transition-all"
-                        placeholder={language === 'en' ? 'Enter code' : 'ಕೋಡ್ ಹಾಕಿ'}
-                      />
-                      <Button 
-                        variant="secondary" 
-                        className="px-6 py-3 text-[10px]"
-                        onClick={() => {
-                          if (onApplyPromo(promoCode)) {
-                            setPromoCode('');
-                          } else {
-                            alert(language === 'en' ? 'Invalid or inactive promo code' : 'ತಪ್ಪಾದ ಅಥವಾ ನಿಷ್ಕ್ರಿಯ ಪ್ರೋಮೋ ಕೋಡ್');
-                          }
-                        }}
-                      >
-                        {language === 'en' ? 'Apply' : 'ಅನ್ವಯಿಸು'}
-                      </Button>
+                {appliedOffer && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-emerald-50 text-emerald-700 p-4 rounded-2xl flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Tag className="w-4 h-4" />
+                      <span className="text-[10px] font-sans font-bold uppercase tracking-widest">{appliedOffer.code} Applied</span>
                     </div>
-                    {appliedOffer && (
-                      <motion.p 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-emerald-600 text-[10px] font-sans font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
-                      >
-                        <CheckCircle2 className="w-4 h-4" /> {language === 'en' ? 'Applied' : 'ಅನ್ವಯಿಸಲಾಗಿದೆ'}: {appliedOffer.title} ({appliedOffer.discount_percent}% off)
-                      </motion.p>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {items.length > 0 && (
-              <div className="p-8 md:p-10 bg-white border-t border-stone-200 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] pb-safe">
-                <div className="space-y-3 mb-8">
-                  <div className="flex justify-between text-stone-400 font-sans text-[10px] font-bold uppercase tracking-widest">
-                    <span>{t.subtotal}</span>
-                    <span>₹{subtotal}</span>
-                  </div>
-                  {discount > 0 && (
-                    <div className="flex justify-between text-emerald-600 font-sans text-[10px] font-bold uppercase tracking-widest">
-                      <span>{t.discount}</span>
-                      <span>-₹{discount}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-stone-400 font-sans text-[10px] font-bold uppercase tracking-widest">
-                    <span>{t.delivery}</span>
-                    <span className={deliveryCharge === 0 ? 'text-emerald-600 font-bold' : ''}>
-                      {deliveryCharge === 0 ? 'FREE' : `₹${deliveryCharge}`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-4 border-t border-stone-100">
-                    <span className="font-sans text-stone-900 font-bold uppercase tracking-widest text-xs">{t.totalAmount}</span>
-                    <span className="text-3xl md:text-4xl font-serif italic text-brand-olive">₹{total}</span>
-                  </div>
-                  <div className="pt-2 text-center">
-                    <p className="text-[9px] text-stone-400 font-sans font-bold uppercase tracking-[0.2em]">
-                      {t.deliveryTime}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="mb-8 p-4 bg-brand-cream rounded-2xl text-center">
-                  {deliveryCharge > 0 ? (
-                    <p className="text-[10px] text-stone-500 font-sans font-bold uppercase tracking-widest leading-relaxed">
-                      {t.addMoreForFree.replace('{weight}', Math.max(0, 15.1 - totalWeight).toFixed(1).toString())}
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-emerald-600 font-sans font-bold uppercase tracking-widest">
-                      {t.freeDeliveryUnlocked}
-                    </p>
-                  )}
-                </div>
-                
-                <Button variant="mango" onClick={onCheckout} className="w-full py-6">
-                  {t.checkoutNow}
-                </Button>
+                    <span className="text-xs font-bold">-{appliedOffer.discount_percent}%</span>
+                  </motion.div>
+                )}
               </div>
-            )}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+
+              <div className="space-y-4 pt-4 border-t border-stone-100">
+                <div className="flex justify-between text-stone-400 text-[10px] font-sans font-bold uppercase tracking-widest">
+                  <span>{t.subtotal}</span>
+                  <span>₹{subtotal}</span>
+                </div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-emerald-600 text-[10px] font-sans font-bold uppercase tracking-widest">
+                    <span>{t.discount}</span>
+                    <span>-₹{discount}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-stone-400 text-[10px] font-sans font-bold uppercase tracking-widest">
+                  <span>{t.delivery}</span>
+                  <span>{deliveryCharge === 0 ? t.free : `₹${deliveryCharge}`}</span>
+                </div>
+                <div className="flex justify-between items-center pt-4">
+                  <span className="text-stone-900 text-sm font-sans font-black uppercase tracking-[0.2em]">{t.total}</span>
+                  <span className="text-4xl font-serif italic text-brand-olive">₹{total}</span>
+                </div>
+              </div>
+
+              <Button 
+                variant="mango" 
+                className="w-full py-8 text-sm rounded-3xl shadow-2xl shadow-brand-mango/20 group"
+                onClick={onCheckout}
+              >
+                {t.proceedToCheckout}
+                <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -1623,7 +1609,7 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
         key: razorpayKey,
         amount: orderData.amount,
         currency: orderData.currency,
-        name: "Namma Kolar Mangoes",
+        name: "Namma kolar mango",
         description: isSplit ? "Security Deposit for Mango Order" : "Full Payment for Mango Order",
         image: "https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=200",
         order_id: orderData.id,
@@ -1677,10 +1663,10 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto px-6 py-12 md:py-32"
+      className="max-w-4xl mx-auto px-6 py-8 md:px-6 md:py-32"
     >
-      <button onClick={step === 1 ? onBack : () => setStep(1)} className="flex items-center gap-3 text-stone-400 mb-12 hover:text-brand-olive transition-all group">
-        <div className="p-2 bg-white rounded-full warm-shadow group-hover:scale-110 transition-all">
+      <button onClick={step === 1 ? onBack : () => setStep(1)} className="flex items-center gap-3 text-stone-400 mb-8 md:mb-12 hover:text-brand-olive transition-all group">
+        <div className="p-2 bg-white rounded-full shadow-sm border border-stone-100 group-hover:scale-110 transition-all">
           <ArrowLeft className="w-4 h-4" />
         </div>
         <span className="font-sans text-[10px] font-bold uppercase tracking-widest">
@@ -1688,25 +1674,25 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
         </span>
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 md:gap-24">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 md:gap-24">
         <div>
           <div className="flex items-center gap-4 mb-8">
             <div className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center font-sans font-bold text-xs transition-colors",
-              step === 1 ? "bg-brand-mango text-stone-900" : "bg-emerald-500 text-white"
+              "w-10 h-10 rounded-full flex items-center justify-center font-sans font-bold text-xs transition-all duration-500",
+              step === 1 ? "bg-brand-mango text-stone-900 ring-4 ring-brand-mango/20" : "bg-emerald-500 text-white"
             )}>
               {step === 1 ? '1' : <CheckCircle2 className="w-5 h-5" />}
             </div>
             <div className="h-px w-8 bg-stone-200" />
             <div className={cn(
-              "w-10 h-10 rounded-full flex items-center justify-center font-sans font-bold text-xs transition-colors",
-              step === 2 ? "bg-brand-mango text-stone-900" : "bg-stone-100 text-stone-400"
+              "w-10 h-10 rounded-full flex items-center justify-center font-sans font-bold text-xs transition-all duration-500",
+              step === 2 ? "bg-brand-mango text-stone-900 ring-4 ring-brand-mango/20" : "bg-stone-100 text-stone-400"
             )}>
               2
             </div>
           </div>
 
-          <h2 className="text-5xl md:text-7xl font-serif italic mb-12 leading-tight">
+          <h2 className="text-4xl md:text-7xl font-serif italic mb-8 md:mb-12 leading-tight">
             {step === 1 ? t.deliveryDetails : t.paymentMethod}
           </h2>
           
@@ -2029,99 +2015,49 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
   };
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-24">
-      <nav className="bg-white warm-shadow px-6 md:px-8 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-4 md:gap-8">
-          <h1 className="text-xl md:text-2xl font-serif italic">Seller Portal</h1>
-          <div className="hidden md:flex gap-6">
-            <button 
-              onClick={() => setActiveTab('inventory')}
-              className={cn(
-                "font-sans text-sm transition-colors",
-                activeTab === 'inventory' ? "text-brand-olive font-semibold" : "text-stone-400"
-              )}
+    <div className="min-h-screen bg-stone-50/50">
+      {/* Sub-navigation for Seller Dashboard */}
+      <div className="bg-white border-b border-stone-100 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-6 md:px-8 flex items-center justify-between">
+          <div className="flex overflow-x-auto no-scrollbar">
+            {['inventory', 'orders', 'offers', 'bookings'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab as any)}
+                className={cn(
+                  "px-6 py-5 text-[10px] font-sans font-bold uppercase tracking-[0.2em] transition-all relative whitespace-nowrap",
+                  activeTab === tab ? "text-brand-olive" : "text-stone-400 hover:text-stone-600"
+                )}
+              >
+                {tab}
+                {activeTab === tab && (
+                  <motion.div 
+                    layoutId="seller-tab-indicator"
+                    className="absolute bottom-0 left-0 right-0 h-1 bg-brand-olive rounded-t-full"
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+          <div className="hidden md:flex items-center gap-4">
+            <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-300">Seller Portal</span>
+            <div className="w-px h-4 bg-stone-100" />
+            <Button 
+              variant="ghost" 
+              onClick={onLogout}
+              className="px-3 py-2 text-red-400 hover:text-red-500 hover:bg-red-50"
             >
-              Inventory
-            </button>
-            <button 
-              onClick={() => setActiveTab('orders')}
-              className={cn(
-                "font-sans text-sm transition-colors",
-                activeTab === 'orders' ? "text-brand-olive font-semibold" : "text-stone-400"
-              )}
-            >
-              Orders
-            </button>
-            <button 
-              onClick={() => setActiveTab('offers')}
-              className={cn(
-                "font-sans text-sm transition-colors",
-                activeTab === 'offers' ? "text-brand-olive font-semibold" : "text-stone-400"
-              )}
-            >
-              Offers
-            </button>
-            <button 
-              onClick={() => setActiveTab('bookings')}
-              className={cn(
-                "font-sans text-sm transition-colors",
-                activeTab === 'bookings' ? "text-brand-olive font-semibold" : "text-stone-400"
-              )}
-            >
-              Bookings
-            </button>
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
-        <button onClick={onLogout} className="p-2 hover:bg-stone-100 rounded-full text-stone-400">
-          <LogOut className="w-5 h-5" />
-        </button>
-      </nav>
-
-      {/* Mobile Seller Nav */}
-      <div className="md:hidden flex bg-white border-b border-stone-200 px-6 py-2 sticky top-[68px] z-20">
-        <button 
-          onClick={() => setActiveTab('inventory')}
-          className={cn(
-            "flex-1 py-2 text-center font-sans text-xs uppercase tracking-widest",
-            activeTab === 'inventory' ? "text-brand-olive font-bold border-b-2 border-brand-olive" : "text-stone-400"
-          )}
-        >
-          Inventory
-        </button>
-        <button 
-          onClick={() => setActiveTab('orders')}
-          className={cn(
-            "flex-1 py-2 text-center font-sans text-xs uppercase tracking-widest",
-            activeTab === 'orders' ? "text-brand-olive font-bold border-b-2 border-brand-olive" : "text-stone-400"
-          )}
-        >
-          Orders
-        </button>
-        <button 
-          onClick={() => setActiveTab('offers')}
-          className={cn(
-            "flex-1 py-2 text-center font-sans text-xs uppercase tracking-widest",
-            activeTab === 'offers' ? "text-brand-olive font-bold border-b-2 border-brand-olive" : "text-stone-400"
-          )}
-        >
-          Offers
-        </button>
-        <button 
-          onClick={() => setActiveTab('bookings')}
-          className={cn(
-            "flex-1 py-2 text-center font-sans text-xs uppercase tracking-widest",
-            activeTab === 'bookings' ? "text-brand-olive font-bold border-b-2 border-brand-olive" : "text-stone-400"
-          )}
-        >
-          Bookings
-        </button>
       </div>
 
       <main className="max-w-7xl mx-auto px-6 md:px-8 py-8 md:py-12">
         {dbStatus && (
-          <div className="flex items-center gap-2 mb-8 bg-white px-4 py-2 rounded-full warm-shadow w-fit">
-            <div className={cn("w-2 h-2 rounded-full", dbStatus.connected ? "bg-emerald-500" : "bg-red-500")} />
-            <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">
+          <div className="flex items-center gap-2 mb-8 bg-white px-4 py-2 rounded-full border border-stone-100 warm-shadow-sm w-fit">
+            <div className={cn("w-1.5 h-1.5 rounded-full", dbStatus.connected ? "bg-emerald-500" : "bg-red-500")} />
+            <span className="text-[9px] font-sans font-bold uppercase tracking-widest text-stone-400">
               Database: {dbStatus.type}
             </span>
           </div>
@@ -2667,7 +2603,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
 };
 
 
-const FarmBookingModal = ({ isOpen, onClose, onBook }: any) => {
+const FarmBookingModal = ({ isOpen, onClose, onBook, t, language }: any) => {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [name, setName] = useState('');
@@ -2697,40 +2633,45 @@ const FarmBookingModal = ({ isOpen, onClose, onBook }: any) => {
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             className="fixed inset-0 z-[101] flex items-center justify-center p-6 pointer-events-none"
           >
-            <Card className="w-full max-w-lg pointer-events-auto overflow-hidden">
-              <div className="relative h-32 bg-brand-olive flex items-center justify-center">
+            <Card className="w-full max-w-lg pointer-events-auto overflow-hidden rounded-[40px] md:rounded-[48px] border-none shadow-2xl">
+              <div className="relative h-40 bg-brand-olive flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 opacity-20">
-                  <div className="w-full h-full" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+                  <div className="w-full h-full" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '32px 32px' }} />
                 </div>
+                <div className="absolute -top-10 -left-10 w-32 h-32 bg-brand-mango/20 rounded-full blur-3xl" />
+                <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-3xl" />
+                
                 <div className="relative text-center">
-                  <Calendar className="w-8 h-8 text-white mx-auto mb-2" />
-                  <h3 className="text-2xl font-serif italic text-white">Book Your Farm Visit</h3>
+                  <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-3 border border-white/20">
+                    <Calendar className="w-6 h-6 text-white" />
+                  </div>
+                  <h3 className="text-2xl md:text-3xl font-serif italic text-white">{language === 'en' ? 'Book Your Visit' : 'ನಿಮ್ಮ ಭೇಟಿಯನ್ನು ಕಾಯ್ದಿರಿಸಿ'}</h3>
                 </div>
-                <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/50 hover:text-white transition-colors">
-                  <X className="w-6 h-6" />
+                <button onClick={onClose} className="absolute top-6 right-6 p-2 text-white/50 hover:text-white transition-colors bg-white/10 rounded-full backdrop-blur-md">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                <div className="grid grid-cols-2 gap-6">
+              <form onSubmit={handleSubmit} className="p-8 md:p-10 space-y-6 md:space-y-8 bg-white">
+                <div className="grid grid-cols-2 gap-4 md:gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold">Select Date</label>
+                    <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold ml-2">{t.selectDate}</label>
                     <input 
                       required
                       type="date" 
                       value={date}
                       onChange={e => setDate(e.target.value)}
                       min={new Date().toISOString().split('T')[0]}
-                      className="w-full bg-stone-50 border-none rounded-2xl px-4 py-3 font-sans text-sm focus:ring-2 focus:ring-brand-olive/20 outline-none"
+                      className="w-full bg-stone-50 border-2 border-stone-50 rounded-[20px] px-5 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold">Select Time</label>
+                    <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold ml-2">{t.selectTime}</label>
                     <select 
                       required
                       value={time}
                       onChange={e => setTime(e.target.value)}
-                      className="w-full bg-stone-50 border-none rounded-2xl px-4 py-3 font-sans text-sm focus:ring-2 focus:ring-brand-olive/20 outline-none"
+                      className="w-full bg-stone-50 border-2 border-stone-50 rounded-[20px] px-5 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all appearance-none"
                     >
                       <option value="">Choose Time</option>
                       <option value="09:00">09:00 AM</option>
@@ -2742,31 +2683,31 @@ const FarmBookingModal = ({ isOpen, onClose, onBook }: any) => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold">Full Name</label>
+                  <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold ml-2">{t.fullName}</label>
                   <input 
                     required
                     type="text" 
-                    placeholder="Enter your name"
+                    placeholder={language === 'en' ? 'Enter your name' : 'ನಿಮ್ಮ ಹೆಸರು'}
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    className="w-full bg-stone-50 border-none rounded-2xl px-4 py-3 font-sans text-sm focus:ring-2 focus:ring-brand-olive/20 outline-none"
+                    className="w-full bg-stone-50 border-2 border-stone-50 rounded-[20px] px-5 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-2 gap-4 md:gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold">Phone Number</label>
+                    <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold ml-2">{t.phoneNumber}</label>
                     <input 
                       required
                       type="tel" 
-                      placeholder="Your contact number"
+                      placeholder={language === 'en' ? 'Contact number' : 'ಫೋನ್ ಸಂಖ್ಯೆ'}
                       value={phone}
                       onChange={e => setPhone(e.target.value)}
-                      className="w-full bg-stone-50 border-none rounded-2xl px-4 py-3 font-sans text-sm focus:ring-2 focus:ring-brand-olive/20 outline-none"
+                      className="w-full bg-stone-50 border-2 border-stone-50 rounded-[20px] px-5 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold">No. of Guests</label>
+                    <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold ml-2">{t.noOfGuests}</label>
                     <input 
                       required
                       type="number" 
@@ -2774,16 +2715,16 @@ const FarmBookingModal = ({ isOpen, onClose, onBook }: any) => {
                       max="10"
                       value={guests}
                       onChange={e => setGuests(parseInt(e.target.value))}
-                      className="w-full bg-stone-50 border-none rounded-2xl px-4 py-3 font-sans text-sm focus:ring-2 focus:ring-brand-olive/20 outline-none"
+                      className="w-full bg-stone-50 border-2 border-stone-50 rounded-[20px] px-5 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
                     />
                   </div>
                 </div>
 
-                <Button type="submit" variant="mango" className="w-full py-5 text-sm uppercase tracking-widest font-bold">
-                  Confirm Booking
+                <Button type="submit" variant="mango" className="w-full py-6 text-xs uppercase tracking-widest font-bold rounded-[20px] shadow-xl shadow-brand-mango/20">
+                  {language === 'en' ? 'Confirm Booking' : 'ಬುಕಿಂಗ್ ದೃಢೀಕರಿಸಿ'}
                 </Button>
-                <p className="text-[10px] text-center text-stone-400 font-sans">
-                  * Visits are free. We only charge for the mangoes you pick.
+                <p className="text-[9px] text-center text-stone-400 font-sans uppercase tracking-widest font-bold">
+                  {language === 'en' ? '* Visits are free. Pay for what you pick.' : '* ಭೇಟಿ ಉಚಿತ. ನೀವು ಆರಿಸಿದ್ದಕ್ಕೆ ಮಾತ್ರ ಪಾವತಿಸಿ.'}
                 </p>
               </form>
             </Card>
@@ -2814,23 +2755,32 @@ const Toast = ({ message, isVisible, onHide }: any) => (
 
 // --- Main App ---
 
-export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
-  constructor(props: { children: ReactNode }) {
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends React.Component<any, any> {
+  constructor(props: any) {
     super(props);
-    this.state = { hasError: false, error: null };
+    (this as any).state = { hasError: false, error: null };
   }
 
-  static getDerivedStateFromError(error: Error) {
+  static getDerivedStateFromError(error: Error): any {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
   }
 
   render() {
-    if (this.state.hasError) {
-      let errorMessage = this.state.error?.message || "Something went wrong.";
+    if ((this as any).state.hasError) {
+      let errorMessage = (this as any).state.error?.message || "Something went wrong.";
       
       return (
         <div className="min-h-screen flex items-center justify-center bg-stone-50 p-6">
@@ -2848,12 +2798,14 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError
       );
     }
 
-    return this.props.children;
+    return (this as any).props.children;
   }
 }
 
 export default function App() {
-  const [view, setView] = useState<'store' | 'checkout' | 'seller' | 'history'>('store');
+  const [showSplash, setShowSplash] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [view, setView] = useState<'store' | 'checkout' | 'seller' | 'history' | 'cart'>('store');
   const [user, setUser] = useState<any | null>(null);
 
   const handleLogin = async () => {
@@ -2873,7 +2825,6 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [appliedOffer, setAppliedOffer] = useState<Offer | null>(null);
-  const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [language, setLanguage] = useState<Language>('en');
@@ -2950,6 +2901,19 @@ export default function App() {
       const data = await res.json();
       setDbStatus(data);
     } catch (e) {}
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch('/api/products');
+      const data = await res.json();
+      setProducts(data);
+    } catch (error) {
+      console.error("Refresh failed:", error);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 1000);
+    }
   };
 
   useEffect(() => {
@@ -3194,6 +3158,12 @@ export default function App() {
     }
   };
 
+  const userObj = useMemo(() => {
+    if (user) return { ...user, isSeller: isSellerAuthenticated };
+    if (isSellerAuthenticated) return { displayName: 'Seller Admin', isSeller: true };
+    return null;
+  }, [user, isSellerAuthenticated]);
+
   if (products.length === 0) {
     return (
       <div className="h-screen w-full bg-brand-cream flex flex-col items-center justify-center">
@@ -3208,7 +3178,7 @@ export default function App() {
           <img src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" className="w-full h-full object-contain leaf-mask" referrerPolicy="no-referrer" loading="lazy" />
         </motion.div>
         <div className="space-y-4 text-center">
-          <h2 className="text-3xl font-serif italic text-brand-olive">Namma Kolar Mangoes</h2>
+          <h2 className="text-3xl font-serif italic text-brand-olive">Namma kolar mango</h2>
           <div className="flex items-center justify-center gap-2">
             <motion.div 
               animate={{ opacity: [0.3, 1, 0.3] }}
@@ -3233,122 +3203,155 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-cream">
-      <Toast 
-        message={toast.message} 
-        isVisible={toast.visible} 
-        onHide={() => setToast(prev => ({ ...prev, visible: false }))} 
-      />
+    <div className="min-h-screen flex flex-col md:flex-row relative overflow-x-hidden bg-brand-cream">
+      <AnimatePresence>
+        {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+      </AnimatePresence>
 
-      <Header 
-        onOpenCart={() => setIsCartOpen(true)}
-        cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        onOpenHistory={() => setView('history')}
+      <Sidebar 
+        view={view}
         setView={setView}
         t={t}
         language={language}
-        onLanguageChange={setLanguage}
-        user={user}
-        handleLogin={handleLogin}
-        handleLogout={handleLogout}
-      />
-
-      <main className="pt-20">
-        {view === 'store' && (
-          <Storefront 
-            products={products} 
-            filteredProducts={filteredProducts}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            offers={offers}
-            testimonials={testimonials}
-            onAddToCart={handleAddToCart}
-            onBuyNow={handleBuyNow}
-            onOpenCart={() => setIsCartOpen(true)}
-            cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
-            onOpenAuth={() => setIsAuthOpen(true)}
-            onOpenHistory={() => {
-              setView('store');
-              setTimeout(() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' }), 100);
-            }}
-            onOpenBooking={() => setIsBookingModalOpen(true)}
-            heroBg={heroBg}
-            onHeroBgChange={setHeroBg}
-            isLoading={isLoading}
-            t={t}
-            language={language}
-            onLanguageChange={setLanguage}
-            buyerEmail={buyerEmail}
-          />
-        )}
-
-        {view === 'history' && (
-          <OrderHistory 
-            onBack={() => setView('store')} 
-            initialEmail={buyerEmail} 
-            t={t}
-            language={language}
-          />
-        )}
-
-        {view === 'checkout' && (
-          <CheckoutForm 
-            items={cart} 
-            appliedOffer={appliedOffer}
-            onBack={() => setView('store')}
-            onSubmit={handleCheckout}
-            t={t}
-            language={language}
-          />
-        )}
-
-        {view === 'seller' && isSellerAuthenticated && (
-          <SellerDashboard 
-            products={products}
-            orders={orders}
-            offers={offers}
-            onUpdateProduct={handleUpdateProduct}
-            onAddProduct={handleAddProduct}
-            onDeleteProduct={handleDeleteProduct}
-            onUpdateOffer={handleUpdateOffer}
-            onDeleteOffer={handleDeleteOffer}
-            onAddOffer={handleAddOffer}
-            onUpdateOrder={handleUpdateOrder}
-            onLogout={() => { setIsSellerAuthenticated(false); setView('store'); }}
-            isLoading={isLoading}
-            showToast={showToast}
-          />
-        )}
-      </main>
-
-      <Footer 
-        t={t} 
-        language={language} 
-        onOpenHistory={() => {
-          setView('store');
-          setTimeout(() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' }), 100);
-        }} 
+        cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
+        user={userObj}
         onOpenAuth={() => setIsAuthOpen(true)}
+        onLogout={() => {
+          if (isSellerAuthenticated) setIsSellerAuthenticated(false);
+          handleLogout();
+          setView('store');
+        }}
       />
 
-      <CartDrawer 
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        items={cart}
-        onUpdateQuantity={handleUpdateQuantity}
-        onRemove={handleRemoveFromCart}
-        onCheckout={() => { setIsCartOpen(false); setView('checkout'); }}
-        onApplyPromo={handleApplyPromo}
-        appliedOffer={appliedOffer}
-        t={t}
-        language={language}
-      />
+      <div className="flex-1 flex flex-col min-w-0">
+        <TopBar 
+          language={language}
+          onLanguageChange={setLanguage}
+          t={t}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
+          onOpenCart={() => setView('cart')}
+        />
+
+        <PullToRefresh isRefreshing={isRefreshing} />
+        
+        <Toast 
+          message={toast.message} 
+          isVisible={toast.visible} 
+          onHide={() => setToast(prev => ({ ...prev, visible: false }))} 
+        />
+
+        <AnimatePresence mode="wait">
+          <motion.main 
+            key={view}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+            className="flex-1 pb-32 md:pb-12"
+          >
+            {view === 'store' && (
+              <Storefront 
+                products={products} 
+                filteredProducts={filteredProducts}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                offers={offers}
+                testimonials={testimonials}
+                onAddToCart={handleAddToCart}
+                onBuyNow={handleBuyNow}
+                onOpenCart={() => setView('cart')}
+                cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
+                onOpenAuth={() => setIsAuthOpen(true)}
+                onOpenHistory={() => {
+                  setView('store');
+                  setTimeout(() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' }), 100);
+                }}
+                onOpenBooking={() => setIsBookingModalOpen(true)}
+                heroBg={heroBg}
+                onHeroBgChange={setHeroBg}
+                isLoading={isLoading}
+                t={t}
+                language={language}
+                onLanguageChange={setLanguage}
+                buyerEmail={buyerEmail}
+                onRefresh={handleRefresh}
+                showToast={showToast}
+              />
+            )}
+
+            {view === 'cart' && (
+              <CartPage 
+                items={cart}
+                onUpdateQuantity={handleUpdateQuantity}
+                onRemove={handleRemoveFromCart}
+                onCheckout={() => setView('checkout')}
+                onApplyPromo={handleApplyPromo}
+                appliedOffer={appliedOffer}
+                t={t}
+                language={language}
+                onBack={() => setView('store')}
+              />
+            )}
+
+            {view === 'history' && (
+              <OrderHistory 
+                onBack={() => setView('store')} 
+                initialEmail={buyerEmail} 
+                t={t}
+                language={language}
+              />
+            )}
+
+            {view === 'checkout' && (
+              <CheckoutForm 
+                items={cart} 
+                appliedOffer={appliedOffer}
+                onBack={() => setView('store')}
+                onSubmit={handleCheckout}
+                t={t}
+                language={language}
+              />
+            )}
+
+            {view === 'seller' && isSellerAuthenticated && (
+              <SellerDashboard 
+                products={products}
+                orders={orders}
+                offers={offers}
+                onUpdateProduct={handleUpdateProduct}
+                onAddProduct={handleAddProduct}
+                onDeleteProduct={handleDeleteProduct}
+                onUpdateOffer={handleUpdateOffer}
+                onDeleteOffer={handleDeleteOffer}
+                onAddOffer={handleAddOffer}
+                onUpdateOrder={handleUpdateOrder}
+                onLogout={() => { setIsSellerAuthenticated(false); setView('store'); }}
+                isLoading={isLoading}
+                showToast={showToast}
+              />
+            )}
+          </motion.main>
+        </AnimatePresence>
+
+        <Footer 
+          t={t} 
+          language={language} 
+          onOpenHistory={() => {
+            setView('store');
+            setTimeout(() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' }), 100);
+          }} 
+          onOpenAuth={() => setIsAuthOpen(true)}
+        />
+      </div>
 
       <FarmBookingModal 
         isOpen={isBookingModalOpen}
         onClose={() => setIsBookingModalOpen(false)}
         onBook={handleBookFarmVisit}
+        t={t}
+        language={language}
       />
 
       <AnimatePresence>
@@ -3359,13 +3362,13 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsAuthOpen(false)}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] flex items-center justify-center p-6"
             />
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-6 pointer-events-none"
             >
               <Card className="w-full max-w-sm pointer-events-auto">
                 <div className="flex justify-between items-center mb-8">
@@ -3421,46 +3424,60 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <HelpChat t={t} language={language} />
-
       {/* Mobile Bottom Navigation */}
-      <div className="fixed bottom-8 left-6 right-6 h-20 bg-white/80 backdrop-blur-lg rounded-[32px] px-8 z-40 md:hidden flex justify-around items-center shadow-2xl border border-stone-100">
-        <button 
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md h-20 bg-white/95 backdrop-blur-3xl rounded-[40px] px-8 z-40 md:hidden flex justify-between items-center shadow-[0_20px_60px_rgba(0,0,0,0.2)] border border-white/50 ring-1 ring-black/5">
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
           onClick={() => { setView('store'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
-          className={cn("flex flex-col items-center gap-1", view === 'store' ? "text-brand-olive" : "text-stone-400")}
+          className={cn("flex flex-col items-center justify-center gap-1.5 transition-all relative", view === 'store' ? "text-brand-olive" : "text-stone-300")}
         >
-          <Package className="w-6 h-6" />
-          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{t.home}</span>
-        </button>
-        <button 
-          onClick={() => setIsCartOpen(true)} 
-          className="relative flex flex-col items-center gap-1 text-stone-400"
+          <div className={cn("p-2.5 rounded-2xl transition-all duration-300", view === 'store' ? "bg-brand-olive/10 scale-110" : "bg-transparent")}>
+            <Package className="w-6 h-6" />
+          </div>
+          <span className={cn("text-[9px] font-sans uppercase tracking-[0.2em] font-black text-center transition-all", view === 'store' ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1")}>{t.home}</span>
+          {view === 'store' && <motion.div layoutId="nav-dot" className="absolute -bottom-1 w-1 h-1 bg-brand-olive rounded-full" />}
+        </motion.button>
+        
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setView('cart')} 
+          className={cn("relative flex flex-col items-center justify-center gap-1.5 transition-all", view === 'cart' ? "text-brand-olive" : "text-stone-300")}
         >
-          <ShoppingBasket className="w-6 h-6" />
+          <div className={cn("p-2.5 rounded-2xl transition-all duration-300", view === 'cart' ? "bg-brand-olive/10 scale-110" : "bg-transparent")}>
+            <ShoppingBasket className="w-6 h-6" />
+          </div>
           {cart.length > 0 && (
-            <span className="absolute -top-2 -right-2 bg-brand-mango text-stone-900 text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-sans font-bold shadow-lg">
+            <span className="absolute top-1 right-1 bg-brand-mango text-stone-900 text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-sans font-black shadow-lg border-2 border-white ring-1 ring-brand-mango/20">
               {cart.reduce((sum, i) => sum + i.quantity, 0)}
             </span>
           )}
-          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{t.basket}</span>
-        </button>
-        <button 
-          onClick={() => {
-            setView('store');
-            setTimeout(() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' }), 100);
-          }} 
-          className="flex flex-col items-center gap-1 text-stone-400"
+          <span className={cn("text-[9px] font-sans uppercase tracking-[0.2em] font-black text-center transition-all", view === 'cart' ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1")}>{t.basket}</span>
+          {view === 'cart' && <motion.div layoutId="nav-dot" className="absolute -bottom-1 w-1 h-1 bg-brand-olive rounded-full" />}
+        </motion.button>
+
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setView('history')} 
+          className={cn("flex flex-col items-center justify-center gap-1.5 transition-all relative", view === 'history' ? "text-brand-olive" : "text-stone-300")}
         >
-          <Clock className="w-6 h-6" />
-          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</span>
-        </button>
-        <button 
+          <div className={cn("p-2.5 rounded-2xl transition-all duration-300", view === 'history' ? "bg-brand-olive/10 scale-110" : "bg-transparent")}>
+            <Clock className="w-6 h-6" />
+          </div>
+          <span className={cn("text-[9px] font-sans uppercase tracking-[0.2em] font-black text-center transition-all", view === 'history' ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1")}>{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</span>
+          {view === 'history' && <motion.div layoutId="nav-dot" className="absolute -bottom-1 w-1 h-1 bg-brand-olive rounded-full" />}
+        </motion.button>
+
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
           onClick={() => setIsAuthOpen(true)} 
-          className="flex flex-col items-center gap-1 text-stone-400"
+          className={cn("flex flex-col items-center justify-center gap-1.5 transition-all relative", isAuthOpen || view === 'seller' ? "text-brand-olive" : "text-stone-300")}
         >
-          <User className="w-6 h-6" />
-          <span className="text-[10px] font-sans uppercase tracking-widest font-bold">{language === 'en' ? 'Account' : 'ಖಾತೆ'}</span>
-        </button>
+          <div className={cn("p-2.5 rounded-2xl transition-all duration-300", isAuthOpen || view === 'seller' ? "bg-brand-olive/10 scale-110" : "bg-transparent")}>
+            <User className="w-6 h-6" />
+          </div>
+          <span className={cn("text-[9px] font-sans uppercase tracking-[0.2em] font-black text-center transition-all", isAuthOpen || view === 'seller' ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1")}>{language === 'en' ? 'Account' : 'ಖಾತೆ'}</span>
+          {(isAuthOpen || view === 'seller') && <motion.div layoutId="nav-dot" className="absolute -bottom-1 w-1 h-1 bg-brand-olive rounded-full" />}
+        </motion.button>
       </div>
 
       {dbStatus && (

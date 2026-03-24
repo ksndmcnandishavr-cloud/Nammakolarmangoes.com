@@ -140,8 +140,8 @@ async function startServer() {
 
   const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
   const razorpay = process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET ? new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
+    key_id: process.env.RAZORPAY_KEY_ID.trim(),
+    key_secret: process.env.RAZORPAY_KEY_SECRET.trim(),
   }) : null;
 
   // API Routes
@@ -308,7 +308,8 @@ async function startServer() {
       res.json(order);
     } catch (err: any) {
       console.error("Razorpay order creation failed:", err);
-      res.status(500).json({ error: err.message });
+      const errorMessage = err.error?.description || err.message || 'Failed to create Razorpay order';
+      res.status(500).json({ error: errorMessage });
     }
   });
 
