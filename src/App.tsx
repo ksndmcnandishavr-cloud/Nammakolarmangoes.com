@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { useState, useEffect, ChangeEvent, useMemo, useRef, ErrorInfo, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GoogleGenAI, GenerateContentResponse, Modality, ThinkingLevel, VideoGenerationReferenceType, VideoGenerationReferenceImage } from "@google/genai";
+import ReactMarkdown from 'react-markdown';
 import { translations, Language } from './translations';
 import { 
   ShoppingBasket, 
@@ -37,13 +39,48 @@ import {
   AlertCircle,
   Search,
   Bell,
-  MessageSquare
+  MessageSquare,
+  Sparkles,
+  Send,
+  Video,
+  Mail,
+  Palette,
+  ExternalLink,
+  Download,
+  TrendingUp,
+  BarChart3,
+  PieChart as PieChartIcon
 } from 'lucide-react';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  Cell,
+  PieChart,
+  Pie
+} from 'recharts';
 import { Product, CartItem, Order, Offer, Testimonial, ProductReview } from './types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 declare const Razorpay: any;
+
+interface AIStudio {
+  hasSelectedApiKey: () => Promise<boolean>;
+  openSelectKey: () => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    aistudio: AIStudio;
+  }
+}
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -118,12 +155,12 @@ const PullToRefresh = ({ isRefreshing }: { isRefreshing: boolean }) => (
 
 const Button = ({ className, variant = 'primary', ...props }: any) => {
   const variants = {
-    primary: 'bg-brand-olive text-white hover:bg-stone-700 shadow-lg shadow-brand-olive/20 hover:shadow-brand-olive/40 active:scale-95',
-    secondary: 'bg-white border border-brand-olive text-brand-olive hover:bg-stone-50 active:scale-95',
-    mango: 'bg-gradient-to-r from-brand-mango to-brand-mango-dark text-stone-900 hover:brightness-110 shadow-lg shadow-brand-mango/30 hover:shadow-brand-mango/50 active:scale-95',
-    outline: 'bg-transparent border-2 border-brand-olive text-brand-olive hover:bg-brand-olive hover:text-white active:scale-95',
-    white: 'bg-white text-brand-olive hover:bg-stone-50 shadow-xl active:scale-95',
-    ghost: 'hover:bg-stone-100 text-stone-600 active:scale-95',
+    primary: 'bg-brand-olive text-white hover:bg-stone-800 shadow-xl shadow-brand-olive/10 hover:shadow-brand-olive/20 active:scale-95',
+    secondary: 'bg-white border border-brand-olive/20 text-brand-olive hover:bg-stone-50 active:scale-95',
+    mango: 'bg-gradient-to-br from-brand-mango to-brand-mango-dark text-stone-900 hover:brightness-105 shadow-xl shadow-brand-mango/20 hover:shadow-brand-mango/40 active:scale-95',
+    outline: 'bg-transparent border border-brand-olive/30 text-brand-olive hover:bg-brand-olive hover:text-white active:scale-95',
+    white: 'bg-white text-brand-olive hover:bg-stone-50 shadow-2xl active:scale-95',
+    ghost: 'hover:bg-stone-100/50 text-stone-500 active:scale-95',
     danger: 'bg-red-50 text-red-600 hover:bg-red-100 active:scale-95'
   };
   
@@ -133,7 +170,7 @@ const Button = ({ className, variant = 'primary', ...props }: any) => {
     <motion.button 
       whileTap={{ scale: 0.96 }}
       animate={isPulsing ? {
-        boxShadow: ["0 0 0 0px rgba(242, 125, 38, 0.4)", "0 0 0 20px rgba(242, 125, 38, 0)", "0 0 0 0px rgba(242, 125, 38, 0)"]
+        boxShadow: ["0 0 0 0px rgba(255, 179, 71, 0.4)", "0 0 0 20px rgba(255, 179, 71, 0)", "0 0 0 0px rgba(255, 179, 71, 0)"]
       } : {}}
       transition={isPulsing ? {
         repeat: Infinity,
@@ -141,7 +178,7 @@ const Button = ({ className, variant = 'primary', ...props }: any) => {
         ease: "easeInOut"
       } : {}}
       className={cn(
-        'px-6 py-3 rounded-xl transition-all font-sans font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 text-center',
+        'px-8 py-4 rounded-2xl transition-all font-display font-bold text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 disabled:opacity-50 text-center',
         variants[variant as keyof typeof variants],
         className
       )} 
@@ -152,7 +189,7 @@ const Button = ({ className, variant = 'primary', ...props }: any) => {
 
 const Card = ({ children, className, glass = false }: any) => (
   <div className={cn(
-    'rounded-3xl warm-shadow p-6 md:p-8 transition-all duration-500 border border-stone-100', 
+    'rounded-[2rem] warm-shadow p-6 md:p-10 transition-all duration-700 border border-stone-100/50', 
     glass ? 'glass-card' : 'bg-white',
     className
   )}>
@@ -169,23 +206,27 @@ const Sidebar = ({ view, setView, t, language, cartCount, user, onOpenAuth, onLo
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-[var(--sidebar-width)] h-screen sticky top-0 bg-white border-r border-stone-100 z-50">
-      <div className="p-8">
+    <aside className="hidden md:flex flex-col w-[var(--sidebar-width)] h-screen sticky top-0 bg-brand-cream border-r border-stone-200/50 z-50">
+      <div className="absolute left-4 top-1/2 -translate-y-1/2 h-64 flex items-center justify-center opacity-10 pointer-events-none">
+        <span className="vertical-text text-stone-900 font-black">ESTD 1984 • KOLAR GOLD FIELDS</span>
+      </div>
+
+      <div className="p-10">
         <div 
           onClick={() => { setView('store'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-          className="flex items-center gap-3 cursor-pointer group"
+          className="flex flex-col gap-4 cursor-pointer group"
         >
-          <div className="w-10 h-10 bg-brand-mango rounded-xl flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
-            <Leaf className="text-stone-900 w-6 h-6" />
+          <div className="w-14 h-14 bg-brand-olive rounded-full flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform duration-500">
+            <Leaf className="text-brand-mango w-7 h-7" />
           </div>
           <div>
-            <h1 className="font-serif italic text-xl leading-none text-stone-900">Namma Kolar</h1>
-            <p className="text-[8px] font-sans font-bold uppercase tracking-[0.3em] mt-1 text-stone-400">Mangoes</p>
+            <h1 className="font-serif italic text-3xl leading-none text-stone-900 tracking-tight">Namma Kolar</h1>
+            <p className="text-[9px] font-display font-black uppercase tracking-[0.4em] mt-2 text-brand-olive/60">Premium Mangoes</p>
           </div>
         </div>
       </div>
 
-      <nav className="flex-1 px-4 space-y-2 mt-4">
+      <nav className="flex-1 px-6 space-y-3 mt-8">
         {navItems.map((item) => {
           if (item.adminOnly && !user?.isSeller) return null;
           const isActive = view === item.id;
@@ -194,18 +235,18 @@ const Sidebar = ({ view, setView, t, language, cartCount, user, onOpenAuth, onLo
               key={item.id}
               onClick={() => setView(item.id)}
               className={cn(
-                "w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all group relative",
+                "w-full flex items-center gap-5 px-5 py-4 rounded-2xl transition-all duration-500 group relative overflow-hidden",
                 isActive 
-                  ? "bg-brand-olive text-white shadow-lg shadow-brand-olive/20" 
-                  : "text-stone-400 hover:bg-stone-50 hover:text-stone-600"
+                  ? "bg-white text-stone-900 shadow-xl shadow-stone-200/50" 
+                  : "text-stone-400 hover:bg-white/50 hover:text-stone-600"
               )}
             >
-              <item.icon className={cn("w-5 h-5 transition-transform group-hover:scale-110", isActive ? "text-white" : "text-stone-300")} />
-              <span className="font-sans font-bold text-[11px] uppercase tracking-widest">{item.label}</span>
+              <item.icon className={cn("w-5 h-5 transition-transform duration-500 group-hover:scale-110", isActive ? "text-brand-olive" : "text-stone-300")} />
+              <span className="font-display font-bold text-[10px] uppercase tracking-[0.15em]">{item.label}</span>
               {item.count > 0 && (
                 <span className={cn(
-                  "ml-auto text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold",
-                  isActive ? "bg-white text-brand-olive" : "bg-brand-mango text-stone-900"
+                  "ml-auto text-[9px] w-5 h-5 rounded-full flex items-center justify-center font-black",
+                  isActive ? "bg-brand-mango text-stone-900" : "bg-stone-200 text-stone-500"
                 )}>
                   {item.count}
                 </span>
@@ -213,7 +254,7 @@ const Sidebar = ({ view, setView, t, language, cartCount, user, onOpenAuth, onLo
               {isActive && (
                 <motion.div 
                   layoutId="sidebar-active"
-                  className="absolute left-0 w-1 h-6 bg-brand-mango rounded-r-full"
+                  className="absolute left-0 w-1 h-8 bg-brand-olive rounded-r-full"
                 />
               )}
             </button>
@@ -221,22 +262,25 @@ const Sidebar = ({ view, setView, t, language, cartCount, user, onOpenAuth, onLo
         })}
       </nav>
 
-      <div className="p-6 border-t border-stone-50">
+      <div className="p-8">
         {user ? (
-          <div className="flex items-center gap-4 p-3 rounded-2xl bg-stone-50">
-            <img src={user.photoURL || ''} className="w-10 h-10 rounded-xl" referrerPolicy="no-referrer" />
+          <div className="flex items-center gap-4 p-4 rounded-3xl bg-white shadow-sm border border-stone-100">
+            <div className="relative">
+              <img src={user.photoURL || null} className="w-10 h-10 rounded-full object-cover" referrerPolicy="no-referrer" />
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
+            </div>
             <div className="flex-1 min-w-0">
-              <p className="font-sans font-bold text-xs truncate">{user.displayName}</p>
+              <p className="font-display font-bold text-[10px] uppercase tracking-wider truncate">{user.displayName}</p>
               <button 
                 onClick={onLogout}
-                className="text-[10px] font-sans font-bold uppercase tracking-widest text-red-400 hover:text-red-600 transition-colors"
+                className="text-[9px] font-display font-black uppercase tracking-widest text-stone-400 hover:text-red-500 transition-colors mt-0.5"
               >
                 {language === 'en' ? 'Logout' : 'ನಿರ್ಗಮಿಸಿ'}
               </button>
             </div>
           </div>
         ) : (
-          <Button variant="secondary" className="w-full" onClick={onOpenAuth}>
+          <Button variant="outline" className="w-full border-stone-200 text-stone-600 hover:bg-white hover:border-white hover:shadow-xl" onClick={onOpenAuth}>
             <User className="w-4 h-4" />
             {language === 'en' ? 'Login' : 'ಲಾಗಿನ್'}
           </Button>
@@ -248,46 +292,50 @@ const Sidebar = ({ view, setView, t, language, cartCount, user, onOpenAuth, onLo
 
 const TopBar = ({ language, onLanguageChange, t, searchQuery, setSearchQuery, cartCount, onOpenCart }: any) => {
   return (
-    <header className="h-[var(--topbar-height)] bg-white/80 backdrop-blur-xl border-b border-stone-100 sticky top-0 z-40 px-8 flex items-center justify-between">
+    <header className="h-[var(--topbar-height)] bg-white/80 backdrop-blur-3xl border-b border-stone-100/50 sticky top-0 z-40 px-6 md:px-10 flex items-center justify-between transition-all duration-500">
       <div className="flex-1 max-w-xl">
         <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-300 group-focus-within:text-brand-olive transition-colors" />
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 group-focus-within:text-brand-olive transition-all duration-500" />
           <input 
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={language === 'en' ? "Search varieties, harvest..." : "ಹುಡುಕಿ..."}
-            className="w-full bg-stone-50 border-none rounded-2xl pl-12 pr-4 py-3 text-sm font-sans focus:ring-2 focus:ring-brand-olive/10 outline-none transition-all"
+            placeholder={language === 'en' ? "Search heritage varieties..." : "ಹುಡುಕಿ..."}
+            className="w-full bg-stone-50/50 border border-stone-100 rounded-[2rem] pl-16 pr-8 py-4 text-[10px] font-display font-black uppercase tracking-[0.2em] focus:bg-white focus:ring-8 focus:ring-brand-olive/5 focus:border-brand-olive/20 outline-none transition-all duration-500 shadow-sm"
           />
         </div>
       </div>
 
-      <div className="flex items-center gap-6 ml-8">
-        <button 
-          onClick={() => onLanguageChange(language === 'en' ? 'kn' : 'en')}
-          className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400 hover:text-brand-olive transition-colors"
-        >
-          {language === 'en' ? 'ಕನ್ನಡ' : 'English'}
-        </button>
+      <div className="flex items-center gap-4 md:gap-10 ml-6 md:ml-10">
+        <div className="hidden sm:flex items-center bg-stone-50 p-1.5 rounded-2xl border border-stone-100">
+          <button 
+            onClick={() => onLanguageChange('en')}
+            className={cn("px-5 py-2.5 rounded-xl text-[9px] font-display font-black uppercase tracking-widest transition-all duration-500", language === 'en' ? "bg-white text-brand-olive shadow-xl" : "text-stone-400 hover:text-stone-600")}
+          >
+            EN
+          </button>
+          <button 
+            onClick={() => onLanguageChange('kn')}
+            className={cn("px-5 py-2.5 rounded-xl text-[9px] font-display font-black uppercase tracking-widest transition-all duration-500", language === 'kn' ? "bg-white text-brand-olive shadow-xl" : "text-stone-400 hover:text-stone-600")}
+          >
+            KN
+          </button>
+        </div>
 
-        <div className="h-6 w-px bg-stone-100" />
+        <div className="h-8 w-px bg-stone-200/50 hidden md:block" />
 
-        <button className="relative p-2 text-stone-400 hover:text-brand-olive transition-colors group">
-          <Bell className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-mango rounded-full border-2 border-white" />
-        </button>
-
-        <button 
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
           onClick={onOpenCart}
-          className="md:hidden relative p-2 text-stone-400 hover:text-brand-olive transition-colors"
+          className="relative p-4 bg-brand-olive text-white rounded-2xl shadow-2xl shadow-brand-olive/20 group hover:bg-brand-olive/90 transition-all duration-500"
         >
-          <ShoppingBasket className="w-5 h-5" />
+          <ShoppingBasket className="w-6 h-6 group-hover:rotate-12 transition-transform" />
           {cartCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-brand-mango text-stone-900 text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+            <span className="absolute -top-2 -right-2 bg-brand-mango text-stone-900 text-[10px] w-6 h-6 rounded-full flex items-center justify-center font-sans font-black shadow-xl border-2 border-white animate-bounce">
               {cartCount}
             </span>
           )}
-        </button>
+        </motion.button>
       </div>
     </header>
   );
@@ -359,47 +407,47 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ duration: 0.8, ease: [0.21, 0.45, 0.32, 0.9] }}
+      transition={{ duration: 1, ease: [0.21, 0.45, 0.32, 0.9] }}
       className="group relative h-full"
     >
-      <Card className="h-full p-0 overflow-hidden bg-white border border-stone-100/50 hover:shadow-2xl transition-all duration-500 rounded-[40px] flex flex-col md:flex-row">
+      <Card className="h-full p-0 overflow-hidden bg-white border border-stone-100/30 hover:shadow-2xl transition-all duration-700 rounded-[3rem] flex flex-col">
         {/* Image Container */}
-        <div className="md:w-2/5 aspect-square md:aspect-auto overflow-hidden relative p-4 md:p-6 bg-stone-50/50">
+        <div className="aspect-[4/5] overflow-hidden relative p-6 bg-stone-50/30">
           <motion.div 
-            whileHover={{ scale: 1.05 }}
-            className="w-full h-full rounded-[24px] md:rounded-[32px] overflow-hidden bg-white shadow-inner"
+            whileHover={{ scale: 1.02 }}
+            className="w-full h-full rounded-[2.5rem] overflow-hidden bg-white shadow-inner relative"
           >
             {!imageLoaded && (
-              <div className="absolute inset-0 bg-stone-100 animate-pulse flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-brand-mango/20 border-t-brand-mango rounded-full animate-spin" />
+              <div className="absolute inset-0 bg-stone-100 animate-shimmer flex items-center justify-center">
+                <div className="w-10 h-10 border-2 border-brand-mango/20 border-t-brand-mango rounded-full animate-spin" />
               </div>
             )}
             <motion.img 
               initial={{ opacity: 0 }}
               animate={{ opacity: imageLoaded ? 1 : 0 }}
-              transition={{ duration: 0.5 }}
+              transition={{ duration: 0.8 }}
               onLoad={() => setImageLoaded(true)}
-              src={product.image_url} 
+              src={product.image_url || null} 
               alt={product.name}
-              className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+              className="w-full h-full object-cover leaf-mask transition-transform duration-1000 group-hover:scale-110"
               referrerPolicy="no-referrer"
               loading="lazy"
             />
           </motion.div>
           
           {/* Badges */}
-          <div className="absolute top-8 left-8 flex flex-col gap-2">
-            <span className="bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[9px] font-sans font-bold uppercase tracking-[0.2em] text-brand-olive shadow-sm border border-white/50">
+          <div className="absolute top-10 left-10 flex flex-col gap-2">
+            <span className="bg-white/90 backdrop-blur-md px-5 py-2 rounded-full text-[9px] font-display font-black uppercase tracking-[0.2em] text-brand-olive shadow-sm border border-white/50">
               {product.variety}
             </span>
           </div>
 
           {product.available === 1 && (
-            <div className="absolute top-8 right-8">
-              <div className="bg-brand-mango text-stone-900 p-2 rounded-full shadow-lg animate-pulse">
+            <div className="absolute top-10 right-10">
+              <div className="bg-brand-mango text-stone-900 p-3 rounded-full shadow-xl animate-float">
                 <Leaf className="w-4 h-4" />
               </div>
             </div>
@@ -407,35 +455,38 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
         </div>
 
         {/* Content Container */}
-        <div className="p-6 md:p-10 flex flex-col flex-1 space-y-6">
-          <div className="space-y-2">
+        <div className="p-8 md:p-12 flex flex-col flex-1 space-y-8">
+          <div className="space-y-4">
             <div className="flex justify-between items-start gap-4">
-              <h3 className="text-2xl md:text-3xl font-serif italic leading-tight">{product.name}</h3>
-              <div className="flex items-center gap-1 bg-stone-50 px-2 py-1 rounded-lg">
+              <h3 className="text-3xl md:text-4xl font-serif italic leading-none tracking-tight">{product.name}</h3>
+              <div className="flex items-center gap-1.5 bg-stone-50 px-3 py-1.5 rounded-full border border-stone-100">
                 <Star className="w-3 h-3 fill-brand-mango text-brand-mango" />
-                <span className="text-[10px] font-sans font-bold text-stone-600">{averageRating || '5.0'}</span>
+                <span className="text-[10px] font-display font-black text-stone-600">{averageRating || '5.0'}</span>
               </div>
             </div>
-            <p className="text-stone-400 text-[11px] font-sans leading-relaxed">
+            <p className="text-stone-400 text-[11px] font-sans leading-relaxed line-clamp-2">
               {product.description}
             </p>
           </div>
 
           {/* Weight Selection */}
-          <div className="space-y-4 flex-1">
+          <div className="space-y-6 flex-1">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-sans font-bold uppercase tracking-widest text-stone-400">{t.selectWeight}</span>
-              <span className="text-xl md:text-2xl font-serif italic text-brand-olive">₹{product.price * selectedWeight}</span>
+              <span className="text-[9px] font-display font-black uppercase tracking-[0.2em] text-stone-400">{t.selectWeight}</span>
+              <div className="flex flex-col items-end">
+                <span className="text-sm text-stone-400 line-through font-serif italic">₹{Math.round(product.price * selectedWeight * 1.2)}</span>
+                <span className="text-3xl font-serif italic text-brand-olive">₹{product.price * selectedWeight}</span>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-3">
               {weights.map(w => (
                 <button
                   key={w}
                   onClick={() => setSelectedWeight(w)}
                   className={cn(
-                    "px-4 py-2 rounded-xl text-[10px] font-sans font-bold transition-all border",
+                    "px-5 py-2.5 rounded-2xl text-[10px] font-display font-black uppercase tracking-widest transition-all duration-500 border",
                     selectedWeight === w 
-                      ? "bg-brand-olive text-white border-brand-olive shadow-md scale-105" 
+                      ? "bg-brand-olive text-white border-brand-olive shadow-xl shadow-brand-olive/20 scale-105" 
                       : "bg-white text-stone-400 border-stone-100 hover:border-brand-olive/20"
                   )}
                 >
@@ -445,17 +496,17 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
             </div>
           </div>
 
-          <div className="flex gap-4 pt-4 border-t border-stone-100">
+          <div className="flex gap-4 pt-8 border-t border-stone-100/50">
             <Button 
               variant="outline" 
-              className="flex-1 py-4 rounded-2xl text-[10px] uppercase tracking-widest font-bold border-stone-200 hover:bg-stone-50"
+              className="flex-1 border-stone-200 text-stone-600 hover:bg-stone-50"
               onClick={() => onAddToCart(product, selectedWeight)}
             >
               {t.addToCart}
             </Button>
             <Button 
               variant="mango" 
-              className="flex-1 py-4 rounded-2xl text-[10px] uppercase tracking-widest font-bold"
+              className="flex-1"
               onClick={() => onBuyNow(product, selectedWeight)}
             >
               {t.buyNow}
@@ -466,7 +517,7 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
           <div className="flex justify-center">
             <button 
               onClick={() => setShowReviews(!showReviews)}
-              className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400 hover:text-brand-olive transition-colors flex items-center gap-2"
+              className="text-[9px] font-display font-black uppercase tracking-[0.2em] text-stone-400 hover:text-brand-olive transition-all duration-500 flex items-center gap-2"
             >
               <MessageSquare className="w-3 h-3" />
               {showReviews ? 'Hide Reviews' : `View Reviews (${reviews.length})`}
@@ -571,33 +622,33 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
 };
 
 const SkeletonCard = () => (
-  <Card className="p-0 overflow-hidden animate-pulse bg-white border border-stone-100/50">
-    <div className="aspect-[4/5] p-6">
-      <div className="w-full h-full bg-stone-100 leaf-mask" />
+  <Card className="h-full p-0 overflow-hidden bg-white border border-stone-100/50 rounded-[40px] flex flex-col md:flex-row">
+    <div className="md:w-2/5 aspect-square overflow-hidden relative p-4 md:p-6 bg-stone-50/50">
+      <div className="w-full h-full bg-stone-100 rounded-[24px] md:rounded-[32px] leaf-mask animate-shimmer" />
     </div>
-    <div className="p-10 pt-4 space-y-6">
+    <div className="flex-1 p-8 md:p-10 space-y-6">
       <div className="flex justify-between items-start">
-        <div className="space-y-2 flex-1">
-          <div className="h-8 bg-stone-100 rounded-lg w-3/4" />
-          <div className="h-3 bg-stone-50 rounded-full w-1/4" />
+        <div className="space-y-3 flex-1">
+          <div className="h-8 bg-stone-100 rounded-xl w-3/4 animate-shimmer" />
+          <div className="h-4 bg-stone-50 rounded-full w-1/4 animate-shimmer" />
         </div>
-        <div className="h-8 bg-stone-100 rounded-lg w-16" />
+        <div className="h-10 bg-stone-100 rounded-xl w-20 animate-shimmer" />
       </div>
       <div className="space-y-3">
-        <div className="h-3 bg-stone-50 rounded-full w-1/4" />
+        <div className="h-3 bg-stone-50 rounded-full w-1/4 animate-shimmer" />
         <div className="flex gap-3">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-8 w-12 bg-stone-50 rounded-full" />
+            <div key={i} className="h-8 w-12 bg-stone-50 rounded-full animate-shimmer" />
           ))}
         </div>
       </div>
       <div className="space-y-2">
-        <div className="h-3 bg-stone-50 rounded-full w-full" />
-        <div className="h-3 bg-stone-50 rounded-full w-2/3" />
+        <div className="h-3 bg-stone-50 rounded-full w-full animate-shimmer" />
+        <div className="h-3 bg-stone-50 rounded-full w-2/3 animate-shimmer" />
       </div>
       <div className="flex gap-4">
-        <div className="h-14 flex-1 bg-stone-100 rounded-full" />
-        <div className="h-14 flex-[2] bg-stone-100 rounded-full" />
+        <div className="h-14 flex-1 bg-stone-100 rounded-full animate-shimmer" />
+        <div className="h-14 flex-[2] bg-stone-100 rounded-full animate-shimmer" />
       </div>
     </div>
   </Card>
@@ -683,52 +734,77 @@ const Testimonials = ({ t, language, testimonials }: any) => {
 // --- Components ---
 
 const Footer = ({ t, language, onOpenHistory, onOpenAuth }: any) => (
-  <footer className="bg-brand-olive text-white pt-32 pb-48 md:pb-32">
-    <div className="max-w-7xl mx-auto px-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-20 mb-32">
-        <div className="md:col-span-2 space-y-10">
-          <h3 className="text-5xl font-serif italic leading-tight">{language === 'en' ? 'Namma Kolar' : 'ನಮ್ಮ ಕೋಲಾರ'} <br /> <span className="text-brand-mango">{language === 'en' ? 'Mangoes' : 'ಮಾವು'}</span></h3>
-          <p className="text-white/50 font-serif italic text-xl max-w-md">
+  <footer className="bg-brand-olive text-white pt-48 pb-48 md:pb-32 relative overflow-hidden">
+    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-mango to-transparent opacity-30" />
+    <div className="absolute -top-64 -right-64 w-[600px] h-[600px] bg-brand-mango/5 rounded-full blur-[120px]" />
+    <div className="absolute -bottom-64 -left-64 w-[600px] h-[600px] bg-brand-olive/20 rounded-full blur-[120px]" />
+
+    <div className="max-w-7xl mx-auto px-6 relative z-10">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-24 mb-48">
+        <div className="md:col-span-2 space-y-12">
+          <div className="space-y-4">
+            <h3 className="text-6xl md:text-8xl font-serif italic leading-[0.8] tracking-tighter">
+              {language === 'en' ? 'Namma Kolar' : 'ನಮ್ಮ ಕೋಲಾರ'} <br /> 
+              <span className="text-brand-mango font-light">{language === 'en' ? 'Mangoes' : 'ಮಾವು'}</span>
+            </h3>
+            <p className="text-white/40 font-display font-black text-[10px] uppercase tracking-[0.5em]">Harvesting Heritage Since 1984</p>
+          </div>
+          <p className="text-white/60 font-serif italic text-2xl max-w-lg leading-relaxed">
             {t.heroSubtitle}
           </p>
-          <div className="flex gap-6">
+          <div className="flex gap-10">
             {['Instagram', 'Facebook', 'Twitter'].map(social => (
-              <button key={social} className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-white/40 hover:text-brand-mango transition-colors">
+              <button key={social} className="text-[10px] font-display font-black uppercase tracking-[0.3em] text-white/30 hover:text-brand-mango transition-all duration-500 hover:-translate-y-1">
                 {social}
               </button>
             ))}
           </div>
         </div>
         
-        <div className="space-y-8">
-          <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-mango">{t.quickLinks}</p>
-          <ul className="space-y-4 font-serif italic text-lg text-white/60">
-            <li><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="hover:text-white transition-colors">{t.home}</button></li>
-            <li><button onClick={() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.shopHarvest}</button></li>
-            <li><button onClick={() => document.getElementById('heritage')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.ourStory}</button></li>
-            <li><button onClick={() => document.getElementById('visit')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.visitOurFarm}</button></li>
-            <li><button onClick={() => document.getElementById('history')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-colors">{t.trackOrder}</button></li>
-            <li><button onClick={onOpenAuth} className="hover:text-white transition-colors">{language === 'en' ? 'Seller Access' : 'ಮಾರಾಟಗಾರರ ಪ್ರವೇಶ'}</button></li>
+        <div className="space-y-10">
+          <p className="text-[11px] font-display font-black uppercase tracking-[0.4em] text-brand-mango/60">{t.quickLinks}</p>
+          <ul className="space-y-6 font-serif italic text-xl text-white/50">
+            <li><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="hover:text-white transition-all duration-500 hover:translate-x-2">{t.home}</button></li>
+            <li><button onClick={() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-all duration-500 hover:translate-x-2">{t.shopHarvest}</button></li>
+            <li><button onClick={() => document.getElementById('heritage')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-all duration-500 hover:translate-x-2">{t.ourStory}</button></li>
+            <li><button onClick={() => document.getElementById('visit')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-all duration-500 hover:translate-x-2">{t.visitOurFarm}</button></li>
+            <li><button onClick={() => document.getElementById('etiquette')?.scrollIntoView({ behavior: 'smooth' })} className="hover:text-white transition-all duration-500 hover:translate-x-2">{t.trackOrder}</button></li>
+            <li><button onClick={onOpenAuth} className="hover:text-white transition-all duration-500 hover:translate-x-2">{language === 'en' ? 'Seller Access' : 'ಮಾರಾಟಗಾರರ ಪ್ರವೇಶ'}</button></li>
           </ul>
         </div>
 
-        <div className="space-y-8">
-          <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-mango">{t.contactUs}</p>
-          <ul className="space-y-4 font-serif italic text-lg text-white/60">
-            <li className="text-white font-bold not-italic">{language === 'en' ? 'Ramakrishnareddy V N' : 'ರಾಮಕೃಷ್ಣರೆಡ್ಡಿ ವಿ ಎನ್'}</li>
-            <li>{language === 'en' ? 'Varatanahalli, Srinivasapura, Kolar, Karnataka-563135' : 'ವರತನಹಳ್ಳಿ, ಶ್ರೀನಿವಾಸಪುರ, ಕೋಲಾರ, ಕರ್ನಾಟಕ-563135'}</li>
-            <li>+91 97430 25459 / 91645 02728</li>
+        <div className="space-y-10">
+          <p className="text-[11px] font-display font-black uppercase tracking-[0.4em] text-brand-mango/60">{t.contactUs}</p>
+          <ul className="space-y-8 font-serif italic text-xl text-white/50">
+            <li className="space-y-2">
+              <span className="text-white font-black not-italic text-[10px] uppercase tracking-widest block">{language === 'en' ? 'Proprietor' : 'ಮಾಲೀಕರು'}</span>
+              <p className="text-white/80">{language === 'en' ? 'Ramakrishnareddy V N' : 'ರಾಮಕೃಷ್ಣರೆಡ್ಡಿ ವಿ ಎನ್'}</p>
+            </li>
+            <li className="space-y-2">
+              <span className="text-white font-black not-italic text-[10px] uppercase tracking-widest block">{language === 'en' ? 'Location' : 'ಸ್ಥಳ'}</span>
+              <p className="text-white/80 leading-relaxed">{language === 'en' ? 'Varatanahalli, Srinivasapura, Kolar, Karnataka-563135' : 'ವರತನಹಳ್ಳಿ, ಶ್ರೀನಿವಾಸಪುರ, ಕೋಲಾರ, ಕರ್ನಾಟಕ-563135'}</p>
+            </li>
+            <li className="space-y-2">
+              <span className="text-white font-black not-italic text-[10px] uppercase tracking-widest block">{language === 'en' ? 'Connect' : 'ಸಂಪರ್ಕಿಸಿ'}</span>
+              <p className="text-white/80">+91 97430 25459 <br /> +91 91645 02728</p>
+            </li>
           </ul>
         </div>
       </div>
 
-      <div className="pt-12 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-8">
-        <p className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30">
-          {t.allRightsReserved}
-        </p>
-        <div className="flex gap-8">
-          <button className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30 hover:text-white transition-colors">{t.privacyPolicy}</button>
-          <button className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-white/30 hover:text-white transition-colors">{t.termsOfService}</button>
+      <div className="pt-16 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-12">
+        <div className="flex flex-col md:flex-row items-center gap-6 md:gap-12">
+          <p className="text-[9px] font-display font-black uppercase tracking-[0.4em] text-white/20">
+            {t.allRightsReserved}
+          </p>
+          <div className="flex gap-10">
+            <button className="text-[9px] font-display font-black uppercase tracking-[0.4em] text-white/20 hover:text-white transition-all duration-500">{t.privacyPolicy}</button>
+            <button className="text-[9px] font-display font-black uppercase tracking-[0.4em] text-white/20 hover:text-white transition-all duration-500">{t.termsOfService}</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 bg-white/5 px-6 py-3 rounded-full border border-white/5">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <span className="text-[9px] font-display font-black uppercase tracking-[0.3em] text-white/40">SERVER ONLINE • HARVEST 2026</span>
         </div>
       </div>
     </div>
@@ -772,182 +848,247 @@ const Storefront = ({
   const featuredProducts = products.filter((p: any) => p.available === 1).slice(0, 3);
 
   return (
-    <div className="relative min-h-screen bg-stone-50/30">
-      {/* Hero Section - More compact for web app feel */}
-      <section id="home" className="relative h-[60vh] md:h-[70vh] flex items-center justify-center overflow-hidden bg-brand-olive rounded-b-[60px] md:rounded-b-[100px] shadow-2xl">
+    <div className="relative min-h-screen bg-brand-cream/30">
+      {/* Hero Section - Editorial / Magazine Style */}
+      <section id="home" className="relative min-h-[90vh] md:min-h-screen flex items-center justify-center overflow-hidden bg-brand-olive rounded-b-[60px] md:rounded-b-[160px] shadow-[0_40px_100px_rgba(0,0,0,0.3)]">
         <motion.div 
           key={heroBg}
-          initial={{ scale: 1.1, opacity: 0 }}
+          initial={{ scale: 1.3, opacity: 0 }}
           animate={{ scale: 1, opacity: 0.4 }}
-          transition={{ duration: 2.5, ease: "easeOut" }}
+          transition={{ duration: 4, ease: [0.16, 1, 0.3, 1] }}
           className="absolute inset-0 z-0"
         >
           <img 
-            src={heroBg} 
-            className="w-full h-full object-cover"
+            src={heroBg || null} 
+            className="w-full h-full object-cover oval-mask brightness-75 contrast-125"
             alt="Mango Orchard"
             referrerPolicy="no-referrer"
           />
         </motion.div>
 
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-olive/40 via-transparent to-brand-olive/60 z-[1]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-olive/80 via-transparent to-brand-olive/95 z-[1]" />
         
-        <div className="relative z-10 text-center px-6 max-w-6xl mx-auto">
+        <div className="relative z-10 text-center px-6 max-w-7xl mx-auto py-20">
           <motion.div
-            initial={{ y: 20, opacity: 0 }}
+            initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5, duration: 1 }}
-            className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 px-6 py-2 rounded-full mb-8"
+            transition={{ delay: 0.5, duration: 1.2, ease: "easeOut" }}
+            className="inline-flex items-center gap-6 bg-white/5 backdrop-blur-3xl border border-white/10 px-10 py-4 rounded-full mb-16 shadow-[0_20px_40px_rgba(0,0,0,0.2)]"
           >
-            <div className="w-2 h-2 bg-brand-mango rounded-full animate-pulse" />
-            <span className="text-white text-[10px] font-sans font-bold uppercase tracking-[0.3em]">
-              {t.harvestAvailable}
+            <div className="w-3 h-3 bg-brand-mango rounded-full mango-glow" />
+            <span className="text-white text-[11px] font-display font-black uppercase tracking-[0.5em] whitespace-nowrap">
+              {t.harvestAvailable} • ESTD 1984
             </span>
           </motion.div>
 
-          <motion.h1 
-            initial={{ y: 30, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.7, duration: 1.2 }}
-            className="text-6xl md:text-[8rem] text-white font-serif mb-8 italic leading-[0.8] tracking-tighter"
-          >
-            {language === 'en' ? (
-              <>Namma <span className="text-brand-mango">Kolar</span> <br /> Mangoes</>
-            ) : (
-              <>ನಮ್ಮ <span className="text-brand-mango">ಕೋಲಾರ</span> <br /> ಮಾವು</>
-            )}
-          </motion.h1>
+          <div className="relative mb-16">
+            <motion.h1 
+              initial={{ y: 100, opacity: 0, skewY: 5 }}
+              animate={{ y: 0, opacity: 1, skewY: 0 }}
+              transition={{ delay: 0.8, duration: 1.8, ease: [0.23, 1, 0.32, 1] }}
+              className="text-8xl md:text-[16vw] text-white font-serif italic leading-[0.7] tracking-tighter drop-shadow-2xl"
+            >
+              {language === 'en' ? (
+                <>Namma <span className="text-brand-mango italic font-light">Kolar</span> <br /> <span className="not-italic font-black text-white/90">Mangoes</span></>
+              ) : (
+                <>ನಮ್ಮ <span className="text-brand-mango italic font-light">ಕೋಲಾರ</span> <br /> <span className="not-italic font-black text-white/90">ಮಾವು</span></>
+              )}
+            </motion.h1>
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.5, rotate: -45 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              transition={{ delay: 2, duration: 1.5, ease: "backOut" }}
+              className="absolute -top-16 -right-16 hidden lg:block"
+            >
+              <div className="w-48 h-48 rounded-full border border-white/10 flex items-center justify-center animate-float backdrop-blur-sm bg-white/5">
+                <div className="text-center space-y-2">
+                  <span className="block text-[10px] font-display font-black text-brand-mango tracking-[0.3em]">PREMIUM</span>
+                  <span className="block text-[8px] font-sans font-bold text-white/40 tracking-[0.5em]">HERITAGE</span>
+                </div>
+              </div>
+            </motion.div>
+          </div>
 
           <motion.p 
-            initial={{ y: 20, opacity: 0 }}
+            initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 1, duration: 1 }}
-            className="text-base md:text-xl text-white/80 font-serif italic max-w-2xl mx-auto mb-12 leading-relaxed"
+            transition={{ delay: 1.2, duration: 1.2 }}
+            className="text-xl md:text-3xl text-white/60 font-serif italic max-w-4xl mx-auto mb-20 leading-relaxed tracking-tight"
           >
             {t.heroSubtitle}
           </motion.p>
 
           <motion.div
-            initial={{ y: 20, opacity: 0 }}
+            initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 1.2 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-8"
+            transition={{ delay: 1.5, duration: 1 }}
+            className="flex flex-col sm:flex-row items-center justify-center gap-12"
           >
             <Button 
               variant="mango" 
-              className="w-full sm:w-auto px-12 py-6 text-xs rounded-2xl shadow-2xl shadow-brand-mango/40 font-bold uppercase tracking-[0.2em]"
+              className="w-full sm:w-auto px-20 py-10 text-xs rounded-[2rem] shadow-[0_32px_64px_rgba(242,125,38,0.3)] font-black uppercase tracking-[0.4em] hover:scale-105 transition-all duration-500 group"
               onClick={() => document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })}
             >
               {t.exploreHarvest}
-              <ChevronRight className="w-5 h-5 ml-3" />
+              <ChevronRight className="w-6 h-6 ml-4 group-hover:translate-x-2 transition-transform" />
             </Button>
+            
+            <div className="flex items-center gap-6">
+              <div className="flex -space-x-4">
+                {[1,2,3].map(i => (
+                  <div key={i} className="w-12 h-12 rounded-full border-2 border-brand-olive overflow-hidden">
+                    <img src={`https://picsum.photos/seed/user${i}/100/100`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  </div>
+                ))}
+              </div>
+              <div className="text-left">
+                <p className="text-white font-display font-black text-[10px] tracking-widest">500+ HAPPY</p>
+                <p className="text-white/40 font-sans text-[8px] tracking-[0.3em]">HARVESTERS</p>
+              </div>
+            </div>
           </motion.div>
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-6 -mt-20 relative z-20">
-        {/* Featured Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-24">
+      <div className="max-w-7xl mx-auto px-6 -mt-32 relative z-20">
+        {/* Featured Section - Horizontal Scroll / Marquee Feel */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-32">
           {featuredProducts.map((product: any, idx: number) => (
             <motion.div
               key={product.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              className="bg-white/80 backdrop-blur-xl p-8 rounded-[40px] border border-white/50 shadow-xl flex items-center gap-6 group cursor-pointer hover:bg-white transition-all"
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: idx * 0.2, duration: 1 }}
+              className="bg-white/60 backdrop-blur-2xl p-10 rounded-[3rem] border border-white/40 shadow-2xl flex flex-col items-center text-center gap-8 group cursor-pointer hover:bg-white transition-all duration-700"
               onClick={() => document.getElementById(`product-${product.id}`)?.scrollIntoView({ behavior: 'smooth' })}
             >
-              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-stone-100 flex-shrink-0">
-                <img src={product.image_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+              <div className="w-32 h-32 rounded-full overflow-hidden bg-stone-100 flex-shrink-0 shadow-xl">
+                <img src={product.image_url || null} className="w-full h-full object-cover leaf-mask group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
               </div>
               <div>
-                <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-brand-mango mb-1">Featured</p>
-                <h4 className="text-xl font-serif italic text-stone-800">{product.name}</h4>
-                <p className="text-xs text-stone-400 font-sans">₹{product.price}/kg</p>
+                <span className="text-[9px] font-display font-black uppercase tracking-[0.3em] text-brand-mango mb-3 block">Featured Heritage</span>
+                <h4 className="text-3xl font-serif italic text-stone-800 leading-none mb-4">{product.name}</h4>
+                <div className="flex items-center justify-center gap-3">
+                  <span className="text-sm text-stone-400 font-serif italic">From</span>
+                  <p className="text-lg text-brand-olive font-display font-black">₹{product.price}/kg</p>
+                </div>
               </div>
             </motion.div>
           ))}
         </div>
 
         {/* Main Content Area */}
-        <div className="flex flex-col lg:flex-row gap-12">
-          {/* Sidebar Filters (Desktop) */}
-          <div className="hidden lg:block w-64 flex-shrink-0 space-y-12">
-            <div className="space-y-6">
-              <h3 className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-stone-400">Categories</h3>
-              <div className="flex flex-col gap-2">
+        <div id="products" className="py-32 md:py-48">
+          <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-24 md:mb-32 gap-12">
+            <div className="max-w-3xl text-left">
+              <span className="text-brand-olive font-display text-[10px] font-black uppercase tracking-[0.5em] mb-6 block">
+                {t.theCollection}
+              </span>
+              <h2 className="text-6xl md:text-[10vw] font-serif italic leading-[0.75] tracking-tighter">
+                {language === 'en' ? 'The Varieties' : 'ಕೋಲಾರದ ವಿವಿಧ'} <br /> 
+                <span className="text-brand-mango/60">{language === 'en' ? 'of Kolar' : 'ತಳಿಗಳು'}</span>
+              </h2>
+            </div>
+            
+            {/* Search Bar */}
+            <div className="relative w-full md:w-96 group">
+              <div className="absolute inset-y-0 left-0 pl-8 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-stone-400 group-focus-within:text-brand-olive transition-all duration-500" />
+              </div>
+              <input
+                type="text"
+                placeholder={t.searchVariety}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-stone-200/50 rounded-3xl pl-16 pr-8 py-5 font-display font-bold text-[10px] uppercase tracking-widest focus:border-brand-olive/30 focus:bg-white focus:ring-8 focus:ring-brand-olive/5 outline-none transition-all duration-500 shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-20">
+            {/* Sidebar Filters (Desktop) */}
+            <div className="hidden lg:block w-72 flex-shrink-0 space-y-16">
+              <div className="space-y-8">
+                <h3 className="text-[10px] font-display font-black uppercase tracking-[0.4em] text-stone-400">Categories</h3>
+                <div className="flex flex-col gap-3">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={cn(
+                        "flex items-center justify-between px-8 py-5 rounded-2xl text-[10px] font-display font-black uppercase tracking-widest transition-all duration-500 text-left group",
+                        selectedCategory === cat 
+                          ? "bg-brand-olive text-white shadow-2xl shadow-brand-olive/20" 
+                          : "bg-white text-stone-400 hover:bg-stone-50 border border-stone-100"
+                      )}
+                    >
+                      {cat}
+                      <ChevronRight className={cn("w-4 h-4 transition-transform duration-500", selectedCategory === cat ? "translate-x-0" : "-translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100")} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-10 bg-brand-olive text-white rounded-[3rem] shadow-2xl space-y-8 relative overflow-hidden group">
+                <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-white/5 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
+                <div className="w-14 h-14 bg-brand-mango rounded-2xl flex items-center justify-center text-stone-900 shadow-xl">
+                  <Leaf className="w-7 h-7" />
+                </div>
+                <h4 className="text-2xl font-serif italic leading-tight">100% Organic <br /> Heritage</h4>
+                <p className="text-[11px] text-white/60 leading-relaxed font-sans font-medium">
+                  All our mangoes are grown using traditional organic methods in the rich soil of Kolar.
+                </p>
+              </div>
+            </div>
+
+            {/* Product Grid Area */}
+            <div className="flex-1 space-y-12">
+              {/* Mobile Categories */}
+              <div className="lg:hidden flex gap-2 overflow-x-auto no-scrollbar pb-1">
                 {categories.map(cat => (
                   <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
                     className={cn(
-                      "flex items-center justify-between px-6 py-4 rounded-2xl text-[11px] font-sans font-bold uppercase tracking-widest transition-all text-left",
+                      "flex-shrink-0 px-6 py-3 rounded-xl text-[10px] font-sans font-bold uppercase tracking-widest transition-all",
                       selectedCategory === cat 
                         ? "bg-brand-olive text-white shadow-lg shadow-brand-olive/20" 
-                        : "bg-white text-stone-500 hover:bg-stone-100 border border-stone-100"
+                        : "bg-white text-stone-400 border border-stone-100"
                     )}
                   >
                     {cat}
-                    {selectedCategory === cat && <ChevronRight className="w-4 h-4" />}
                   </button>
                 ))}
               </div>
-            </div>
 
-            <div className="p-8 bg-brand-mango/10 rounded-[40px] border border-brand-mango/20 space-y-6">
-              <div className="w-12 h-12 bg-brand-mango rounded-2xl flex items-center justify-center text-stone-900">
-                <Leaf className="w-6 h-6" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 stagger-in">
+                {isLoading ? (
+                  [1, 2, 3, 4].map(i => <SkeletonCard key={i} />)
+                ) : (
+                  finalFilteredProducts.map((product: Product) => (
+                    <div key={product.id} id={`product-${product.id}`}>
+                      <ProductCard product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} buyerEmail={buyerEmail} showToast={showToast} />
+                    </div>
+                  ))
+                )}
               </div>
-              <h4 className="text-xl font-serif italic text-stone-800">100% Organic</h4>
-              <p className="text-xs text-stone-500 leading-relaxed font-sans">
-                All our mangoes are grown using traditional organic methods in Kolar.
-              </p>
-            </div>
-          </div>
-
-          {/* Product Grid Area */}
-          <div className="flex-1 space-y-12">
-            {/* Mobile Categories */}
-            <div className="lg:hidden flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={cn(
-                    "flex-shrink-0 px-6 py-3 rounded-xl text-[10px] font-sans font-bold uppercase tracking-widest transition-all",
-                    selectedCategory === cat 
-                      ? "bg-brand-olive text-white shadow-lg shadow-brand-olive/20" 
-                      : "bg-white text-stone-400 border border-stone-100"
-                  )}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-
-            <div id="products" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-8 md:gap-12">
-              {isLoading ? (
-                [1, 2, 3, 4].map(i => <SkeletonCard key={i} />)
-              ) : (
-                finalFilteredProducts.map((product: Product) => (
-                  <div key={product.id} id={`product-${product.id}`}>
-                    <ProductCard product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} buyerEmail={buyerEmail} showToast={showToast} />
+              
+              {!isLoading && finalFilteredProducts.length === 0 && (
+                <div className="text-center py-32 bg-white rounded-[60px] border border-stone-100">
+                  <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Search className="w-8 h-8 text-stone-300" />
                   </div>
-                ))
+                  <p className="text-stone-500 font-serif italic text-xl">{t.noProductsFound}</p>
+                </div>
               )}
             </div>
-            
-            {!isLoading && finalFilteredProducts.length === 0 && (
-              <div className="text-center py-32 bg-white rounded-[60px] border border-stone-100">
-                <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Search className="w-8 h-8 text-stone-300" />
-                </div>
-                <p className="text-stone-500 font-serif italic text-xl">{t.noProductsFound}</p>
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      <HarvestCalendar language={language} />
 
       {/* Heritage Section */}
       <section id="heritage" className="py-24 md:py-48 bg-white overflow-hidden mt-32">
@@ -1013,56 +1154,7 @@ const Storefront = ({
         </div>
       </section>
 
-      {/* Product Grid */}
-      <section id="products" className="max-w-7xl mx-auto px-6 py-24 md:py-48">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-20 md:mb-40 gap-12 md:gap-16">
-          <div className="max-w-2xl text-left">
-            <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em] mb-6 block">
-              {t.theCollection}
-            </span>
-            <h2 className="text-6xl md:text-9xl font-serif italic leading-[0.85] tracking-tighter">
-              {language === 'en' ? 'The Varieties' : 'ಕೋಲಾರದ ವಿವಿಧ'} <br /> 
-              {language === 'en' ? 'of Kolar' : 'ತಳಿಗಳು'}
-            </h2>
-            <p className="mt-8 text-stone-400 font-sans text-[10px] uppercase tracking-[0.3em] font-bold">
-              {language === 'en' ? 'All Varieties on Single Screen' : 'ಎಲ್ಲಾ ತಳಿಗಳು ಒಂದೇ ಪರದೆಯಲ್ಲಿ'}
-            </p>
-            
-            {/* Search Bar */}
-            <div className="mt-12 relative max-w-md group">
-              <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-stone-400 group-focus-within:text-brand-mango transition-colors" />
-              </div>
-              <input
-                type="text"
-                placeholder={t.searchVariety}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-stone-50/50 border-2 border-stone-50 rounded-full pl-14 pr-8 py-5 font-sans text-sm focus:border-brand-mango focus:bg-white focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all shadow-sm"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-12">
-          {isLoading ? (
-            [1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)
-          ) : (
-            finalFilteredProducts.map((product: Product) => (
-              <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onBuyNow={onBuyNow} t={t} buyerEmail={buyerEmail} showToast={showToast} />
-            ))
-          )}
-        </div>
-        
-        {!isLoading && finalFilteredProducts.length === 0 && (
-          <div className="text-center py-32">
-            <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Search className="w-8 h-8 text-stone-300" />
-            </div>
-            <p className="text-stone-500 font-serif italic text-xl">{t.noProductsFound}</p>
-          </div>
-        )}
-      </section>
+      <Testimonials t={t} language={language} testimonials={testimonials} />
 
       {/* Visit Our Farm Section */}
       <section id="visit" className="py-32 bg-brand-cream overflow-hidden">
@@ -1100,7 +1192,7 @@ const Storefront = ({
                 className="relative"
               >
                 <img 
-                  src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&q=80&w=1200" 
+                  src="https://images.pexels.com/photos/36135710/pexels-photo-36135710.jpeg" 
                   className="rounded-[40px] warm-shadow w-full aspect-[4/3] object-cover"
                   alt="Our Farm in Srinivasapura"
                   referrerPolicy="no-referrer"
@@ -1129,8 +1221,6 @@ const Storefront = ({
           </div>
         </div>
       </section>
-
-      <Testimonials t={t} language={language} testimonials={testimonials} />
 
       {/* Order History Section */}
       <section id="history" className="bg-brand-cream py-32">
@@ -1183,51 +1273,68 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn("max-w-4xl mx-auto", !isSection && "px-6 py-8 md:px-6 md:py-32")}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className={cn("min-h-screen bg-stone-50/50 pb-32", isSection ? "min-h-0 bg-transparent p-0" : "p-6")}
     >
-      {!isSection && (
-        <button onClick={onBack} className="flex items-center gap-3 text-stone-400 mb-8 md:mb-12 hover:text-brand-olive transition-all group">
-          <div className="p-2 bg-white rounded-full shadow-sm border border-stone-100 group-hover:scale-110 transition-all">
-            <ArrowLeft className="w-4 h-4" />
-          </div>
-          <span className="font-sans text-[10px] font-bold uppercase tracking-widest">{t.backToStore}</span>
-        </button>
-      )}
+      <div className="max-w-4xl mx-auto stagger-in">
+        {!isSection && (
+          <button onClick={onBack} className="flex items-center gap-3 text-stone-400 mb-12 md:mb-20 hover:text-brand-olive transition-all group">
+            <div className="p-3 bg-white rounded-full shadow-sm border border-stone-100 group-hover:scale-110 transition-all">
+              <ArrowLeft className="w-5 h-5" />
+            </div>
+            <span className="font-sans text-[11px] font-black uppercase tracking-[0.3em]">{t.backToStore}</span>
+          </button>
+        )}
 
-      <div className="mb-8 md:mb-12">
-        <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em] mb-3 md:mb-4 block">{language === 'en' ? 'Track Your' : 'ನಿಮ್ಮ ಆರ್ಡರ್'}</span>
-        <h2 className="text-4xl md:text-7xl font-serif italic leading-tight">{language === 'en' ? 'Order' : 'ಆರ್ಡರ್'} <br />{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</h2>
-      </div>
-
-      <Card className="mb-12 md:mb-16 p-6 md:p-10 bg-white/80 backdrop-blur-sm border-stone-100">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 mb-8">
-          <div className="space-y-3">
-            <label className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold">{t.emailAddress}</label>
-            <input 
-              type="email" 
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full bg-stone-50/50 border-2 border-stone-50 rounded-[20px] px-6 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
-              placeholder="your@email.com"
-            />
-          </div>
-          <div className="space-y-3">
-            <label className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-bold">{t.phoneNumber}</label>
-            <input 
-              type="tel" 
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              className="w-full bg-stone-50/50 border-2 border-stone-50 rounded-[20px] px-6 py-4 font-sans text-sm focus:border-brand-mango focus:ring-4 focus:ring-brand-mango/5 outline-none transition-all"
-              placeholder="+91 97430 25459 / 91645 02728"
-            />
-          </div>
+        <div className="mb-12 md:mb-20">
+          <span className="text-brand-olive font-sans text-[11px] font-black uppercase tracking-[0.5em] mb-4 md:mb-6 block">{language === 'en' ? 'Track Your' : 'ನಿಮ್ಮ ಆರ್ಡರ್'}</span>
+          <h2 className="text-5xl md:text-8xl font-serif italic leading-tight text-stone-800">{language === 'en' ? 'Order' : 'ಆರ್ಡರ್'} <br />{language === 'en' ? 'History' : 'ಇತಿಹಾಸ'}</h2>
         </div>
-        <Button variant="mango" onClick={() => fetchHistory()} disabled={loading || (!email && !phone)} className="w-full py-5 rounded-[20px]">
-          {loading ? (language === 'en' ? 'Searching...' : 'ಹುಡುಕಲಾಗುತ್ತಿದೆ...') : t.findMyOrders}
-        </Button>
-      </Card>
+
+        <Card className="mb-16 md:mb-24 p-8 md:p-16 bg-white/90 backdrop-blur-xl border-stone-100 rounded-[3rem] shadow-2xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mb-12">
+            <div className="space-y-4">
+              <label className="text-[10px] uppercase tracking-[0.3em] text-stone-400 font-sans font-black ml-2">{t.emailAddress}</label>
+              <div className="relative">
+                <Mail className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-300" />
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full bg-stone-50/50 border-2 border-stone-100 rounded-[2rem] pl-16 pr-8 py-6 font-sans text-sm font-bold focus:border-brand-mango focus:ring-12 focus:ring-brand-mango/5 outline-none transition-all"
+                  placeholder="your@email.com"
+                />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <label className="text-[10px] uppercase tracking-[0.3em] text-stone-400 font-sans font-black ml-2">{t.phoneNumber}</label>
+              <div className="relative">
+                <Phone className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-300" />
+                <input 
+                  type="tel" 
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  className="w-full bg-stone-50/50 border-2 border-stone-100 rounded-[2rem] pl-16 pr-8 py-6 font-sans text-sm font-bold focus:border-brand-mango focus:ring-12 focus:ring-brand-mango/5 outline-none transition-all"
+                  placeholder="+91 00000 00000"
+                />
+              </div>
+            </div>
+          </div>
+          <Button 
+            variant="mango" 
+            onClick={() => fetchHistory()} 
+            disabled={loading || (!email && !phone)} 
+            className="w-full py-7 rounded-[2rem] text-lg shadow-2xl shadow-brand-mango/20"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>{language === 'en' ? 'Searching...' : 'ಹುಡುಕಲಾಗುತ್ತಿದೆ...'}</span>
+              </div>
+            ) : t.findMyOrders}
+          </Button>
+        </Card>
 
       {searched && (
         <div className="space-y-8">
@@ -1376,6 +1483,7 @@ const OrderHistory = ({ onBack, initialEmail, t, language, isSection = false }: 
           )}
         </div>
       )}
+    </div>
     </motion.div>
   );
 };
@@ -1390,7 +1498,7 @@ const CartPage = ({ items, onUpdateQuantity, onRemove, onCheckout, onApplyPromo,
 
   return (
     <div className="min-h-screen bg-stone-50/50 pb-32">
-      <div className="max-w-3xl mx-auto px-6 py-12">
+      <div className="max-w-3xl mx-auto px-6 py-12 stagger-in">
         <div className="flex items-center justify-between mb-12">
           <motion.button 
             whileTap={{ scale: 0.9 }}
@@ -1400,7 +1508,7 @@ const CartPage = ({ items, onUpdateQuantity, onRemove, onCheckout, onApplyPromo,
             <ChevronLeft className="w-6 h-6" />
           </motion.button>
           <div className="text-center flex-1">
-            <h2 className="text-4xl font-serif italic">{t.yourBasket}</h2>
+            <h2 className="text-4xl font-serif italic text-stone-800">{t.yourBasket}</h2>
             <p className="text-[10px] font-sans font-bold uppercase tracking-[0.2em] text-stone-400 mt-2">{items.length} {t.items}</p>
           </div>
           <div className="w-14" /> {/* Spacer */}
@@ -1425,11 +1533,11 @@ const CartPage = ({ items, onUpdateQuantity, onRemove, onCheckout, onApplyPromo,
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   key={`${item.id}-${item.selectedWeight}`} 
-                  className="flex gap-6 md:gap-8 group"
+                  className="flex items-center gap-6 md:gap-8 group"
                 >
                   <div className="relative flex-shrink-0">
                     <img 
-                      src={item.image_url} 
+                      src={item.image_url || null} 
                       alt={item.name} 
                       className="w-24 h-24 md:w-32 md:h-32 rounded-[24px] md:rounded-[32px] object-cover shadow-lg group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
@@ -1946,8 +2054,8 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
   );
 };
 
-const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProduct, onDeleteProduct, onUpdateOffer, onDeleteOffer, onAddOffer, onUpdateOrder, onLogout, isLoading, showToast }: any) => {
-  const [activeTab, setActiveTab] = useState('inventory');
+const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProduct, onDeleteProduct, onUpdateOffer, onDeleteOffer, onAddOffer, onUpdateOrder, onLogout, isLoading, showToast, language }: any) => {
+  const [activeTab, setActiveTab] = useState('overview');
   const [bookings, setBookings] = useState<any[]>([]);
   const [bookingFilter, setBookingFilter] = useState('all');
   const [isAdding, setIsAdding] = useState(false);
@@ -2020,7 +2128,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
       <div className="bg-white border-b border-stone-100 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 md:px-8 flex items-center justify-between">
           <div className="flex overflow-x-auto no-scrollbar">
-            {['inventory', 'orders', 'offers', 'bookings'].map((tab) => (
+            {['overview', 'inventory', 'orders', 'offers', 'bookings'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
@@ -2062,7 +2170,9 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
             </span>
           </div>
         )}
-        {activeTab === 'inventory' ? (
+        {activeTab === 'overview' ? (
+          <SalesOverview orders={orders} products={products} language={language} />
+        ) : activeTab === 'inventory' ? (
           // ... inventory content ...
           <div className="space-y-8">
             <div className="flex justify-between items-center">
@@ -2142,7 +2252,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
             <div className="grid grid-cols-1 gap-4">
               {isLoading ? (
                 [1, 2, 3].map(i => (
-                  <Card key={i} className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 py-6 md:py-4 animate-pulse">
+                  <Card key={i} className="flex flex-col md:flex-row items-center gap-4 md:gap-6 py-6 md:py-4 animate-pulse">
                     <div className="w-16 h-16 rounded-xl bg-stone-100" />
                     <div className="flex-1 space-y-2">
                       <div className="h-4 bg-stone-100 rounded w-1/3" />
@@ -2157,10 +2267,10 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                 ))
               ) : (
                 products.map((product: Product) => (
-                  <Card key={product.id} className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 py-6 md:py-4">
+                  <Card key={product.id} className="flex flex-col md:flex-row items-center gap-4 md:gap-6 py-6 md:py-4">
                   <div className="flex items-center gap-4 w-full md:w-auto">
                     <div className="relative group">
-                      <img src={product.image_url} className="w-16 h-16 rounded-xl object-cover" referrerPolicy="no-referrer" loading="lazy" />
+                      <img src={product.image_url || null} className="w-16 h-16 rounded-xl object-cover" referrerPolicy="no-referrer" loading="lazy" />
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl cursor-pointer">
                         <Upload className="w-4 h-4 text-white" />
                         <input 
@@ -2508,7 +2618,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
             <div className="grid grid-cols-1 gap-4">
               {isLoading ? (
                 [1, 2].map(i => (
-                  <Card key={i} className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 py-6 md:py-4 animate-pulse">
+                  <Card key={i} className="flex flex-col md:flex-row items-center gap-4 md:gap-6 py-6 md:py-4 animate-pulse">
                     <div className="flex-1 space-y-2">
                       <div className="h-4 bg-stone-100 rounded w-1/3" />
                       <div className="h-3 bg-stone-50 rounded w-1/2" />
@@ -2522,7 +2632,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                 ))
               ) : (
                 offers.map((offer: Offer) => (
-                  <Card key={offer.id} className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 py-6 md:py-4">
+                  <Card key={offer.id} className="flex flex-col md:flex-row items-center gap-4 md:gap-6 py-6 md:py-4">
                     <div className="flex-1 space-y-2 w-full">
                       <div className="flex flex-col md:flex-row gap-4">
                         <div className="flex-1 space-y-1">
@@ -2634,7 +2744,14 @@ const FarmBookingModal = ({ isOpen, onClose, onBook, t, language }: any) => {
             className="fixed inset-0 z-[101] flex items-center justify-center p-6 pointer-events-none"
           >
             <Card className="w-full max-w-lg pointer-events-auto overflow-hidden rounded-[40px] md:rounded-[48px] border-none shadow-2xl">
-              <div className="relative h-40 bg-brand-olive flex items-center justify-center overflow-hidden">
+              <div className="relative h-48 bg-brand-olive flex items-center justify-center overflow-hidden">
+                <img 
+                  src="https://images.pexels.com/photos/36135710/pexels-photo-36135710.jpeg" 
+                  className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay"
+                  alt="Farm Visit"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-brand-olive via-brand-olive/40 to-transparent" />
                 <div className="absolute inset-0 opacity-20">
                   <div className="w-full h-full" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '32px 32px' }} />
                 </div>
@@ -2802,6 +2919,948 @@ export class ErrorBoundary extends React.Component<any, any> {
   }
 }
 
+const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: () => void, language: Language }) => {
+  const [activeTab, setActiveTab] = useState<'chat' | 'art' | 'video'>('chat');
+  const [messages, setMessages] = useState<{ role: 'user' | 'model', content: string, groundingMetadata?: any }[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [generatedVideo, setGeneratedVideo] = useState<string | null>(null);
+  const [imageToEdit, setImageToEdit] = useState<string | null>(null);
+  const [imageToAnimate, setImageToAnimate] = useState<string | null>(null);
+  const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('1K');
+  const [isKeySelected, setIsKeySelected] = useState(false);
+
+  useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setIsKeySelected(selected);
+      }
+    };
+    checkKey();
+  }, []);
+
+  const handleOpenSelectKey = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setIsKeySelected(true);
+    }
+  };
+
+  const handleChat = async () => {
+    if (!input.trim()) return;
+    const userMsg = { role: 'user' as const, content: input };
+    setMessages(prev => [...prev, userMsg]);
+    const currentInput = input;
+    setInput('');
+    setIsLoading(true);
+
+    try {
+      const isLocationQuery = /where|location|address|near|map|directions|ದಾರಿ|ಸ್ಥಳ|ವಿಳಾಸ/i.test(currentInput);
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [...messages, userMsg].map(m => ({ role: m.role, parts: [{ text: m.content }] })),
+        config: {
+          systemInstruction: language === 'en' 
+            ? "You are the Namma Kolar Mango Concierge. Help users with mango varieties, recipes, farm visits, and Kolar heritage. Use Google Search and Maps for accurate info."
+            : "ನೀವು ನಮ್ಮ ಕೋಲಾರ ಮಾವು ಕನ್ಸೈರ್ಜ್. ಮಾವಿನ ತಳಿಗಳು, ಪಾಕವಿಧಾನಗಳು, ಫಾರ್ಮ್ ಭೇಟಿಗಳು ಮತ್ತು ಕೋಲಾರ ಪರಂಪರೆಯ ಬಗ್ಗೆ ಬಳಕೆದಾರರಿಗೆ ಸಹಾಯ ಮಾಡಿ. ನಿಖರವಾದ ಮಾಹಿತಿಗಾಗಿ Google ಹುಡುಕಾಟ ಮತ್ತು ನಕ್ಷೆಗಳನ್ನು ಬಳಸಿ.",
+          tools: isLocationQuery ? [{ googleMaps: {} }] : [{ googleSearch: {} }],
+        },
+      });
+
+      const modelMsg = { 
+        role: 'model' as const, 
+        content: response.text || (language === 'en' ? "I'm sorry, I couldn't process that." : "ಕ್ಷಮಿಸಿ, ನನಗೆ ಅದನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ."),
+        groundingMetadata: response.candidates?.[0]?.groundingMetadata
+      };
+      setMessages(prev => [...prev, modelMsg]);
+    } catch (error) {
+      console.error("Chat error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    if (!input.trim()) return;
+    setIsLoading(true);
+    try {
+      if (!isKeySelected) {
+        await handleOpenSelectKey();
+      }
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-image-preview',
+        contents: { parts: [{ text: input }] },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1",
+            imageSize: imageSize as any
+          }
+        }
+      });
+
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          setGeneratedImage(`data:image/png;base64,${part.inlineData.data}`);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("Image generation error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditImage = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => setImageToEdit(event.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleApplyEdit = async () => {
+    if (!imageToEdit || !input.trim()) return;
+    setIsLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const base64Data = imageToEdit.split(',')[1];
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-image-preview',
+        contents: {
+          parts: [
+            { inlineData: { data: base64Data, mimeType: "image/png" } },
+            { text: input }
+          ]
+        }
+      });
+
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          setGeneratedImage(`data:image/png;base64,${part.inlineData.data}`);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("Image edit error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAnimateImage = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => setImageToAnimate(event.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!imageToAnimate) return;
+    setIsLoading(true);
+    try {
+      if (!isKeySelected) {
+        await handleOpenSelectKey();
+      }
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const base64Data = imageToAnimate.split(',')[1];
+      
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-fast-generate-preview',
+        prompt: input || "Animate this mango scene beautifully",
+        image: {
+          imageBytes: base64Data,
+          mimeType: 'image/png',
+        },
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: '16:9'
+        }
+      });
+
+      while (!operation.done) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        operation = await ai.operations.getVideosOperation({ operation: operation });
+      }
+
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+      if (downloadLink) {
+        const response = await fetch(downloadLink, {
+          method: 'GET',
+          headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY! },
+        });
+        const blob = await response.blob();
+        setGeneratedVideo(URL.createObjectURL(blob));
+      }
+    } catch (error) {
+      console.error("Video generation error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-12 bg-stone-900/40 backdrop-blur-xl">
+      <motion.div 
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 100, opacity: 0 }}
+        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        className="bg-white/90 backdrop-blur-2xl w-full max-w-6xl h-full md:h-[85vh] rounded-none md:rounded-[4rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.3)] flex flex-col border border-white/40"
+      >
+        <div className="p-8 md:p-12 border-b border-stone-100 flex justify-between items-center bg-white/50">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 bg-brand-olive rounded-3xl flex items-center justify-center shadow-2xl shadow-brand-olive/20 rotate-3 group-hover:rotate-0 transition-transform duration-500">
+              <Sparkles className="w-8 h-8 text-brand-mango animate-pulse" />
+            </div>
+            <div>
+              <h2 className="text-3xl md:text-4xl font-serif italic text-stone-800 leading-none mb-2">Mango AI Concierge</h2>
+              <p className="text-[10px] font-sans font-bold uppercase tracking-[0.4em] text-stone-400">Your Personal Harvest Guide</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="p-4 hover:bg-stone-100 rounded-full transition-all duration-300 hover:rotate-90"
+          >
+            <X className="w-8 h-8 text-stone-400" />
+          </button>
+        </div>
+
+        <div className="flex border-b border-stone-100 bg-white/30 backdrop-blur-md">
+          {[
+            { id: 'chat', label: 'Chat', icon: MessageSquare },
+            { id: 'art', label: 'Art', icon: Palette },
+            { id: 'video', label: 'Video', icon: Video }
+          ].map(tab => (
+            <button 
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={cn(
+                "flex-1 py-8 flex items-center justify-center gap-3 text-[10px] font-display font-black uppercase tracking-[0.3em] transition-all duration-500 relative overflow-hidden group",
+                activeTab === tab.id ? "text-brand-olive" : "text-stone-400 hover:text-stone-600"
+              )}
+            >
+              <tab.icon className={cn("w-4 h-4 transition-transform duration-500", activeTab === tab.id ? "scale-110" : "group-hover:scale-110")} />
+              {tab.label}
+              {activeTab === tab.id && (
+                <motion.div 
+                  layoutId="active-tab-line" 
+                  className="absolute bottom-0 left-0 right-0 h-1 bg-brand-olive" 
+                />
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 md:p-16 space-y-10 custom-scrollbar">
+          {activeTab === 'chat' && (
+            <div className="space-y-8 max-w-3xl mx-auto">
+              {messages.length === 0 && (
+                <div className="text-center py-20 space-y-8">
+                  <div className="w-24 h-24 bg-brand-cream rounded-full flex items-center justify-center mx-auto shadow-inner">
+                    <Sparkles className="w-10 h-10 text-brand-mango" />
+                  </div>
+                  <div className="space-y-4">
+                    <h3 className="text-3xl font-serif italic text-stone-800">How can I assist you today?</h3>
+                    <p className="text-sm text-stone-400 font-serif italic">Ask about varieties, recipes, or farm visits.</p>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-4">
+                    {[
+                      "Tell me about Alphonso",
+                      "Best mango recipes",
+                      "How to visit the farm?",
+                      "Mango harvest season"
+                    ].map(suggestion => (
+                      <button 
+                        key={suggestion}
+                        onClick={() => { setInput(suggestion); handleChat(); }}
+                        className="px-6 py-3 bg-white border border-stone-100 rounded-full text-[10px] font-display font-black uppercase tracking-widest text-stone-400 hover:border-brand-olive hover:text-brand-olive transition-all duration-300 shadow-sm"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {messages.map((m, i) => (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={i} 
+                  className={cn("flex", m.role === 'user' ? "justify-end" : "justify-start")}
+                >
+                  <div className={cn(
+                    "max-w-[85%] p-8 rounded-[2.5rem] shadow-2xl transition-all duration-500", 
+                    m.role === 'user' 
+                      ? "bg-brand-olive text-white rounded-tr-none shadow-brand-olive/20" 
+                      : "bg-white text-stone-800 rounded-tl-none border border-stone-100 shadow-stone-200/50"
+                  )}>
+                    <div className={cn("prose prose-sm max-w-none font-serif italic text-lg leading-relaxed", m.role === 'user' ? "text-white prose-invert" : "text-stone-700")}>
+                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                    </div>
+                    {m.groundingMetadata?.groundingChunks && (
+                      <div className="mt-6 pt-6 border-t border-black/5 space-y-3">
+                        <p className="text-[9px] font-display font-black uppercase tracking-[0.3em] opacity-40">Verified Sources</p>
+                        <div className="flex flex-wrap gap-3">
+                          {m.groundingMetadata.groundingChunks.map((chunk: any, ci: number) => (
+                            <a 
+                              key={ci} 
+                              href={chunk.web?.uri || chunk.maps?.uri} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-stone-50 rounded-full text-[10px] font-sans font-bold text-brand-olive hover:bg-brand-olive hover:text-white transition-all duration-300 border border-stone-100"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              {chunk.web?.title || chunk.maps?.title || 'View Source'}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+              {isLoading && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex justify-start"
+                >
+                  <div className="bg-white border border-stone-100 p-8 rounded-[2.5rem] rounded-tl-none shadow-xl flex items-center gap-4">
+                    <div className="flex gap-1.5">
+                      {[0, 1, 2].map(dot => (
+                        <motion.div 
+                          key={dot}
+                          animate={{ y: [0, -5, 0] }}
+                          transition={{ repeat: Infinity, duration: 1, delay: dot * 0.2 }}
+                          className="w-2 h-2 bg-brand-mango rounded-full"
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-display font-black uppercase tracking-[0.3em] text-stone-400">Concierge is thinking</span>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'art' && (
+            <div className="space-y-12 max-w-4xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div className="space-y-8 p-10 bg-stone-50 rounded-[3rem] border border-stone-100">
+                  <div className="space-y-2">
+                    <h4 className="text-2xl font-serif italic text-stone-800">Generate Art</h4>
+                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">Create mango-inspired masterpieces</p>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <p className="text-[9px] font-display font-black uppercase tracking-[0.2em] text-stone-400">Resolution</p>
+                    <div className="flex gap-3">
+                      {['1K', '2K', '4K'].map(size => (
+                        <button 
+                          key={size}
+                          onClick={() => setImageSize(size as any)}
+                          className={cn(
+                            "flex-1 py-4 text-[10px] font-display font-black rounded-2xl border transition-all duration-500", 
+                            imageSize === size 
+                              ? "bg-brand-olive text-white border-brand-olive shadow-xl shadow-brand-olive/20" 
+                              : "bg-white border-stone-200 text-stone-400 hover:border-brand-olive hover:text-brand-olive"
+                          )}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button 
+                    variant="mango"
+                    onClick={handleGenerateImage}
+                    disabled={isLoading || !input}
+                    className="w-full py-6 rounded-2xl shadow-xl shadow-brand-mango/20"
+                  >
+                    {isLoading ? "Creating..." : "Generate Masterpiece"}
+                  </Button>
+                </div>
+
+                <div className="space-y-8 p-10 bg-brand-olive text-white rounded-[3rem] shadow-2xl relative overflow-hidden group">
+                  <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-white/5 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000" />
+                  <div className="space-y-2 relative z-10">
+                    <h4 className="text-2xl font-serif italic">Edit Your Photo</h4>
+                    <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-white/40">Enhance your harvest photos</p>
+                  </div>
+                  
+                  <div className="relative z-10">
+                    <input type="file" onChange={handleEditImage} className="hidden" id="edit-upload" />
+                    <label htmlFor="edit-upload" className="block w-full py-12 border-2 border-dashed border-white/20 rounded-[2rem] text-center cursor-pointer hover:border-brand-mango hover:bg-white/5 transition-all duration-500 group">
+                      {imageToEdit ? (
+                        <div className="space-y-4">
+                          <img src={imageToEdit} className="h-32 mx-auto rounded-xl shadow-2xl" alt="Preview" />
+                          <p className="text-[10px] font-display font-black uppercase tracking-widest text-brand-mango">Change Photo</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mx-auto group-hover:bg-brand-mango group-hover:text-stone-900 transition-all duration-500">
+                            <Upload className="w-8 h-8" />
+                          </div>
+                          <p className="text-[10px] font-display font-black uppercase tracking-widest">Upload Photo</p>
+                        </div>
+                      )}
+                    </label>
+                  </div>
+
+                  <Button 
+                    variant="mango"
+                    onClick={handleApplyEdit}
+                    disabled={isLoading || !input || !imageToEdit}
+                    className="w-full py-6 rounded-2xl relative z-10"
+                  >
+                    {isLoading ? "Applying..." : "Apply AI Edit"}
+                  </Button>
+                </div>
+              </div>
+
+              {generatedImage && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mt-16 space-y-8"
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-2xl font-serif italic text-stone-800">Generated Result</h4>
+                    <button 
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = generatedImage;
+                        link.download = 'mango-ai-art.png';
+                        link.click();
+                      }}
+                      className="flex items-center gap-2 text-[10px] font-display font-black uppercase tracking-widest text-stone-400 hover:text-brand-olive transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download Art
+                    </button>
+                  </div>
+                  <div className="relative aspect-square max-w-2xl mx-auto rounded-[4rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.2)] border-8 border-white group">
+                    <img src={generatedImage} alt="Generated Art" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'video' && (
+            <div className="space-y-12 max-w-3xl mx-auto text-center">
+              <div className="space-y-4">
+                <h3 className="text-4xl md:text-6xl font-serif italic text-stone-800">Bring Your Harvest <br /> <span className="text-brand-mango">To Life</span></h3>
+                <p className="text-lg text-stone-400 font-serif italic">Upload a photo and let AI animate your mango moment.</p>
+              </div>
+
+              <div className="relative group">
+                <input type="file" onChange={handleAnimateImage} className="hidden" id="video-upload" />
+                <label htmlFor="video-upload" className="block w-full py-24 border-2 border-dashed border-stone-200 rounded-[4rem] cursor-pointer hover:border-brand-olive hover:bg-stone-50 transition-all duration-700 relative overflow-hidden">
+                  {imageToAnimate ? (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="relative z-10"
+                    >
+                      <img src={imageToAnimate} className="max-h-80 mx-auto rounded-[2rem] shadow-2xl border-4 border-white" alt="To Animate" />
+                      <div className="mt-8 flex items-center justify-center gap-3">
+                        <div className="w-2 h-2 bg-brand-mango rounded-full animate-pulse" />
+                        <p className="text-[10px] font-display font-black uppercase tracking-widest text-stone-400">Ready to animate</p>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="space-y-6 relative z-10">
+                      <div className="w-24 h-24 bg-stone-100 rounded-[2rem] flex items-center justify-center mx-auto group-hover:bg-brand-olive group-hover:text-white transition-all duration-500">
+                        <Video className="w-10 h-10" />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-display font-black uppercase tracking-[0.4em] text-stone-400">Step 1: Upload Photo</p>
+                        <p className="text-stone-300 font-serif italic">Click to browse your gallery</p>
+                      </div>
+                    </div>
+                  )}
+                </label>
+              </div>
+
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <p className="text-[10px] font-display font-black uppercase tracking-[0.4em] text-stone-400 text-left">Step 2: Describe the motion (Optional)</p>
+                  <input 
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="e.g., Gentle breeze blowing through the leaves..."
+                    className="w-full px-8 py-6 bg-stone-50 border border-stone-100 rounded-3xl font-serif italic text-lg focus:outline-none focus:ring-4 focus:ring-brand-olive/5 focus:border-brand-olive transition-all"
+                  />
+                </div>
+
+                <Button 
+                  variant="mango" 
+                  onClick={handleGenerateVideo}
+                  disabled={isLoading || !imageToAnimate}
+                  className="w-full py-8 rounded-3xl shadow-2xl shadow-brand-mango/30 text-xs"
+                >
+                  {isLoading ? (
+                    <div className="flex items-center gap-4">
+                      <div className="w-5 h-5 border-2 border-stone-900 border-t-transparent rounded-full animate-spin" />
+                      <span>Generating Your Video...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4">
+                      <Sparkles className="w-5 h-5" />
+                      <span>Animate into Video</span>
+                    </div>
+                  )}
+                </Button>
+              </div>
+
+              {generatedVideo && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 40 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-20 space-y-8"
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-2xl font-serif italic text-stone-800">Your Mango Moment</h4>
+                    <button 
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = generatedVideo;
+                        link.download = 'mango-moment.mp4';
+                        link.click();
+                      }}
+                      className="flex items-center gap-2 text-[10px] font-display font-black uppercase tracking-widest text-stone-400 hover:text-brand-olive transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Save Video
+                    </button>
+                  </div>
+                  <div className="relative rounded-[4rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.3)] border-8 border-white bg-stone-900">
+                    <video src={generatedVideo} controls className="w-full aspect-video object-cover" />
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="p-8 md:p-12 border-t border-stone-100 bg-white/80 backdrop-blur-3xl">
+          <div className="relative max-w-4xl mx-auto group">
+            <div className="absolute inset-y-0 left-8 flex items-center pointer-events-none">
+              <Sparkles className="w-6 h-6 text-brand-mango animate-pulse" />
+            </div>
+            <input 
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (activeTab === 'chat' ? handleChat() : activeTab === 'art' ? handleGenerateImage() : null)}
+              placeholder={activeTab === 'chat' ? (language === 'en' ? "Ask about varieties, recipes, or farm visits..." : "ತಳಿಗಳು, ಪಾಕವಿಧಾನಗಳು ಅಥವಾ ಫಾರ್ಮ್ ಭೇಟಿಗಳ ಬಗ್ಗೆ ಕೇಳಿ...") : (language === 'en' ? "Describe the art or edit you want..." : "ನೀವು ಬಯಸುವ ಕಲೆ ಅಥವಾ ಸಂಪಾದನೆಯನ್ನು ವಿವರಿಸಿ...")}
+              className="w-full pl-20 pr-32 py-10 bg-stone-50 border-2 border-stone-100 rounded-[3rem] font-serif italic text-2xl focus:outline-none focus:ring-12 focus:ring-brand-mango/5 focus:border-brand-mango transition-all duration-700 group-focus-within:bg-white group-focus-within:shadow-[0_40px_100px_rgba(0,0,0,0.1)] shadow-inner"
+            />
+            <motion.button 
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => activeTab === 'chat' ? handleChat() : activeTab === 'art' ? handleGenerateImage() : null}
+              disabled={isLoading || !input}
+              className="absolute right-4 top-4 bottom-4 px-12 bg-brand-olive text-white rounded-[2.5rem] hover:bg-brand-olive/90 transition-all duration-500 disabled:opacity-50 shadow-2xl shadow-brand-olive/20 flex items-center justify-center"
+            >
+              {isLoading ? (
+                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Send className="w-6 h-6" />
+              )}
+            </motion.button>
+          </div>
+          <p className="text-center mt-8 text-[9px] font-sans font-black uppercase tracking-[0.5em] text-stone-300">
+            Powered by Gemini AI • Harvest Intelligence • Namma Kolar
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const AuthModal = ({ onClose, language, sellerPin, setSellerPin, handleSellerLogin, buyerEmail, setBuyerEmail, setView }: any) => {
+  return (
+    <>
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-6"
+      />
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        className="fixed inset-0 z-[100] flex items-center justify-center p-6 pointer-events-none"
+      >
+        <Card className="w-full max-w-sm pointer-events-auto rounded-[3rem] shadow-[0_32px_64px_rgba(0,0,0,0.2)] border-white/20">
+          <div className="flex justify-between items-center mb-10">
+            <div className="space-y-1">
+              <h3 className="text-3xl font-serif italic text-stone-800">{language === 'en' ? 'Account' : 'ಖಾತೆ'}</h3>
+              <p className="text-[9px] font-sans font-bold uppercase tracking-[0.3em] text-stone-400">Access your heritage harvest</p>
+            </div>
+            <button onClick={onClose} className="p-3 hover:bg-stone-100 rounded-full transition-all duration-300 hover:rotate-90">
+              <X className="w-6 h-6 text-stone-400" />
+            </button>
+          </div>
+          
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Lock className="w-3 h-3 text-brand-olive" />
+                <label className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-black">{language === 'en' ? 'Seller Access' : 'ಮಾರಾಟಗಾರರ ಪ್ರವೇಶ'}</label>
+              </div>
+              <input 
+                type="password" 
+                maxLength={4}
+                value={sellerPin}
+                onChange={e => setSellerPin(e.target.value)}
+                className="w-full bg-stone-50 border-2 border-stone-50 rounded-2xl px-6 py-5 font-sans text-center text-3xl tracking-[0.8em] focus:border-brand-mango focus:ring-8 focus:ring-brand-mango/5 outline-none transition-all"
+                placeholder="••••"
+              />
+              <Button variant="primary" onClick={handleSellerLogin} className="w-full py-5 rounded-2xl shadow-xl shadow-brand-olive/10">{language === 'en' ? 'Login as Admin' : 'ನಿರ್ವಾಹಕರಾಗಿ ಲಾಗಿನ್'}</Button>
+            </div>
+
+            <div className="relative py-2">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-stone-100"></div></div>
+              <div className="relative flex justify-center">
+                <span className="bg-white px-4 text-[9px] font-display font-black uppercase tracking-[0.4em] text-stone-300">OR</span>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ShoppingBasket className="w-3 h-3 text-brand-mango" />
+                <label className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-sans font-black">{language === 'en' ? 'Buyer Portal' : 'ಖರೀದಿದಾರರ ಪೋರ್ಟಲ್'}</label>
+              </div>
+              <input 
+                type="text" 
+                value={buyerEmail}
+                onChange={e => setBuyerEmail(e.target.value)}
+                className="w-full bg-stone-50 border-2 border-stone-50 rounded-2xl px-6 py-5 font-sans text-sm font-bold focus:border-brand-mango focus:ring-8 focus:ring-brand-mango/5 outline-none transition-all"
+                placeholder={language === 'en' ? 'Email or Phone Number' : 'ಇಮೇಲ್ ಅಥವಾ ಫೋನ್ ಸಂಖ್ಯೆ'}
+              />
+              <Button 
+                variant="secondary" 
+                className="w-full py-5 rounded-2xl border-stone-200 text-stone-600 hover:bg-stone-50"
+                onClick={() => {
+                  setView('history');
+                  onClose();
+                }}
+              >
+                {language === 'en' ? 'Track My Orders' : 'ನನ್ನ ಆರ್ಡರ್ಗಳನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ'}
+              </Button>
+            </div>
+          </div>
+          
+          <p className="text-center mt-10 text-[8px] font-sans font-bold uppercase tracking-[0.3em] text-stone-300">
+            Secure Access • Namma Kolar Heritage
+          </p>
+        </Card>
+      </motion.div>
+    </>
+  );
+};
+
+const HarvestCalendar = ({ language }: { language: Language }) => {
+  const t = translations[language];
+  const months = [
+    { name: 'Mar', status: 'Flowering', color: 'bg-emerald-100 text-emerald-700', icon: <Leaf className="w-4 h-4" /> },
+    { name: 'Apr', status: 'Fruit Set', color: 'bg-amber-100 text-amber-700', icon: <Sparkles className="w-4 h-4" /> },
+    { name: 'May', status: 'Peak Harvest', color: 'bg-brand-mango/20 text-brand-mango-dark', icon: <Star className="w-4 h-4" />, active: true },
+    { name: 'Jun', status: 'Late Harvest', color: 'bg-brand-mango/10 text-brand-mango-dark', icon: <Clock className="w-4 h-4" /> },
+    { name: 'Jul', status: 'Post Harvest', color: 'bg-stone-100 text-stone-600', icon: <CheckCircle2 className="w-4 h-4" /> },
+  ];
+
+  return (
+    <section className="py-24 bg-white overflow-hidden">
+      <div className="max-w-7xl mx-auto px-6 md:px-8">
+        <div className="flex flex-col md:flex-row gap-16 items-center">
+          <div className="flex-1 space-y-8">
+            <div className="space-y-4">
+              <span className="text-[10px] font-sans font-bold uppercase tracking-[0.3em] text-brand-olive block">
+                {t.seasonalRhythm}
+              </span>
+              <h2 className="text-5xl md:text-6xl font-serif italic leading-tight">
+                {t.theHarvest} <br />
+                <span className="text-stone-300">{t.calendar}</span>
+              </h2>
+            </div>
+            <p className="text-stone-500 font-sans leading-relaxed max-w-md">
+              {t.harvestDescription}
+            </p>
+          </div>
+          
+          <div className="flex-1 w-full">
+            <div className="grid grid-cols-1 gap-4">
+              {months.map((m, idx) => (
+                <motion.div
+                  key={m.name}
+                  initial={{ opacity: 0, x: 50 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  viewport={{ once: true }}
+                  className={cn(
+                    "group flex items-center justify-between p-6 rounded-[24px] border transition-all duration-500",
+                    m.active 
+                      ? "bg-brand-mango/5 border-brand-mango/20 shadow-xl shadow-brand-mango/5 scale-105 z-10" 
+                      : "bg-stone-50/50 border-stone-100 hover:bg-white hover:border-stone-200"
+                  )}
+                >
+                  <div className="flex items-center gap-6">
+                    <span className={cn(
+                      "text-4xl font-serif italic transition-colors",
+                      m.active ? "text-brand-mango-dark" : "text-stone-300 group-hover:text-stone-400"
+                    )}>
+                      {m.name}
+                    </span>
+                    <div className="h-8 w-px bg-stone-100" />
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">Status</p>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider flex items-center gap-1", m.color)}>
+                          {m.icon}
+                          {m.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {m.active && (
+                    <div className="flex items-center gap-2 text-brand-mango-dark animate-pulse">
+                      <span className="text-[10px] font-sans font-bold uppercase tracking-widest">Live Now</span>
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand-mango-dark" />
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const SalesOverview = ({ orders, products, language }: { orders: Order[], products: Product[], language: Language }) => {
+  const t = translations[language];
+  const stats = useMemo(() => {
+    const totalSales = orders.reduce((acc, o) => acc + o.total, 0);
+    const totalOrders = orders.length;
+    const pendingOrders = orders.filter(o => o.status === 'pending').length;
+    const completedOrders = orders.filter(o => o.status === 'delivered').length;
+    
+    // Group orders by date for chart
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toISOString().split('T')[0];
+    });
+
+    const chartData = last7Days.map(date => {
+      const dayOrders = orders.filter(o => o.created_at.startsWith(date));
+      return {
+        date: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
+        sales: dayOrders.reduce((acc, o) => acc + o.total, 0),
+        count: dayOrders.length
+      };
+    });
+
+    // Sales by variety
+    const varietyData = products.map(p => {
+      const productOrders = orders.filter(o => 
+        Array.isArray(o.items) && o.items.some(item => item.id === p.id)
+      );
+      return {
+        name: p.name,
+        value: productOrders.reduce((acc, o) => acc + o.total, 0)
+      };
+    }).filter(v => v.value > 0);
+
+    return { totalSales, totalOrders, pendingOrders, completedOrders, chartData, varietyData };
+  }, [orders, products]);
+
+  const COLORS = ['#5A5A40', '#FFB800', '#E4E3E0', '#141414', '#F27D26'];
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {[
+          { label: t.totalRevenue, value: `₹${stats.totalSales}`, icon: <TrendingUp className="w-5 h-5" />, color: 'text-emerald-600' },
+          { label: t.totalOrders, value: stats.totalOrders, icon: <Package className="w-5 h-5" />, color: 'text-brand-olive' },
+          { label: t.pending, value: stats.pendingOrders, icon: <Clock className="w-5 h-5" />, color: 'text-amber-600' },
+          { label: t.completed, value: stats.completedOrders, icon: <CheckCircle2 className="w-5 h-5" />, color: 'text-blue-600' },
+        ].map((stat, i) => (
+          <Card key={i} className="p-6 flex items-center gap-4">
+            <div className={cn("p-3 rounded-2xl bg-stone-50", stat.color)}>
+              {stat.icon}
+            </div>
+            <div>
+              <p className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">{stat.label}</p>
+              <p className="text-2xl font-serif italic">{stat.value}</p>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <Card className="lg:col-span-2 p-8">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-xl font-serif italic">{t.revenueTrend}</h3>
+            <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-400">{t.last7Days}</span>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={stats.chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F5F5F4" />
+                <XAxis 
+                  dataKey="date" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fill: '#A8A29E', fontWeight: 600 }}
+                  dy={10}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fill: '#A8A29E', fontWeight: 600 }}
+                  dx={-10}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#fff', 
+                    border: 'none', 
+                    borderRadius: '16px', 
+                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+                    fontSize: '12px',
+                    fontFamily: 'Inter, sans-serif'
+                  }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="sales" 
+                  stroke="#5A5A40" 
+                  strokeWidth={3} 
+                  dot={{ fill: '#5A5A40', strokeWidth: 2, r: 4, stroke: '#fff' }}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        <Card className="p-8">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-xl font-serif italic">{t.salesByVariety}</h3>
+            <BarChart3 className="w-5 h-5 text-stone-300" />
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={stats.varietyData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {stats.varietyData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#fff', 
+                    border: 'none', 
+                    borderRadius: '16px', 
+                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)',
+                    fontSize: '12px',
+                    fontFamily: 'Inter, sans-serif'
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 space-y-2">
+            {stats.varietyData.map((v, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                  <span className="text-[10px] font-sans font-bold uppercase tracking-widest text-stone-500">{v.name}</span>
+                </div>
+                <span className="text-xs font-serif italic">₹{v.value}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+const MangoEtiquette = ({ language }: { language: Language }) => {
+  const t = translations[language];
+  const steps = [
+    { title: t.ripening, desc: t.ripeningDesc, icon: <Sparkles className="w-6 h-6" /> },
+    { title: t.cutting, desc: t.cuttingDesc, icon: <Palette className="w-6 h-6" /> },
+    { title: t.storage, desc: t.storageDesc, icon: <ShieldCheck className="w-6 h-6" /> },
+  ];
+
+  return (
+    <section id="etiquette" className="py-24 bg-stone-50/50">
+      <div className="max-w-7xl mx-auto px-6 md:px-8">
+        <div className="text-center space-y-4 mb-20">
+          <span className="text-[10px] font-sans font-bold uppercase tracking-[0.4em] text-brand-olive block">
+            {t.etiquetteSubtitle}
+          </span>
+          <h2 className="text-5xl md:text-7xl font-serif italic leading-tight">
+            {t.etiquetteTitle}
+          </h2>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+          {steps.map((step, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.2 }}
+              viewport={{ once: true }}
+              className="group space-y-6 text-center"
+            >
+              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto warm-shadow group-hover:scale-110 transition-transform duration-500">
+                <div className="text-brand-olive">
+                  {step.icon}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h3 className="text-2xl font-serif italic">{step.title}</h3>
+                <p className="text-stone-500 font-sans text-sm leading-relaxed max-w-[250px] mx-auto">
+                  {step.desc}
+                </p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2827,6 +3886,7 @@ export default function App() {
   const [appliedOffer, setAppliedOffer] = useState<Offer | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [isAIConciergeOpen, setIsAIConciergeOpen] = useState(false);
   const [language, setLanguage] = useState<Language>('en');
   const t = useMemo(() => translations[language], [language]);
 
@@ -3175,7 +4235,7 @@ export default function App() {
           transition={{ repeat: Infinity, duration: 2 }}
           className="w-24 h-24 mb-8"
         >
-          <img src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" className="w-full h-full object-contain leaf-mask" referrerPolicy="no-referrer" loading="lazy" />
+          <img src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=800" className="w-full h-full object-cover leaf-mask" referrerPolicy="no-referrer" loading="lazy" />
         </motion.div>
         <div className="space-y-4 text-center">
           <h2 className="text-3xl font-serif italic text-brand-olive">Namma kolar mango</h2>
@@ -3330,10 +4390,13 @@ export default function App() {
                 onLogout={() => { setIsSellerAuthenticated(false); setView('store'); }}
                 isLoading={isLoading}
                 showToast={showToast}
+                language={language}
               />
             )}
           </motion.main>
         </AnimatePresence>
+
+        <MangoEtiquette language={language} />
 
         <Footer 
           t={t} 
@@ -3356,71 +4419,16 @@ export default function App() {
 
       <AnimatePresence>
         {isAuthOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsAuthOpen(false)}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] flex items-center justify-center p-6"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="fixed inset-0 z-[100] flex items-center justify-center p-6 pointer-events-none"
-            >
-              <Card className="w-full max-w-sm pointer-events-auto">
-                <div className="flex justify-between items-center mb-8">
-                  <h3 className="text-2xl font-serif italic">{language === 'en' ? 'Login' : 'ಲಾಗಿನ್'}</h3>
-                  <button onClick={() => setIsAuthOpen(false)} className="p-2 hover:bg-stone-100 rounded-full">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-widest text-stone-400 font-sans">{language === 'en' ? 'Seller PIN' : 'ಮಾರಾಟಗಾರರ ಪಿನ್'}</label>
-                    <input 
-                      type="password" 
-                      maxLength={4}
-                      value={sellerPin}
-                      onChange={e => setSellerPin(e.target.value)}
-                      className="w-full bg-stone-50 border-none rounded-2xl px-4 py-3 font-sans text-center text-2xl tracking-[1em] focus:ring-2 focus:ring-brand-olive/20 outline-none"
-                      placeholder="••••"
-                    />
-                    <Button onClick={handleSellerLogin} className="w-full mt-2">{language === 'en' ? 'Seller Access' : 'ಮಾರಾಟಗಾರರ ಪ್ರವೇಶ'}</Button>
-                  </div>
-
-                  <div className="relative py-4">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-stone-100"></div></div>
-                    <div className="relative flex justify-center text-xs uppercase tracking-widest text-stone-300 font-sans bg-white px-2">{language === 'en' ? 'OR' : 'ಅಥವಾ'}</div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs uppercase tracking-widest text-stone-400 font-sans">{language === 'en' ? 'Buyer Email/Phone' : 'ಖರೀದಿದಾರರ ಇಮೇಲ್/ಫೋನ್'}</label>
-                    <input 
-                      type="text" 
-                      value={buyerEmail}
-                      onChange={e => setBuyerEmail(e.target.value)}
-                      className="w-full bg-stone-50 border-none rounded-2xl px-4 py-3 font-sans text-sm focus:ring-2 focus:ring-brand-olive/20 outline-none"
-                      placeholder={language === 'en' ? 'Email or Phone' : 'ಇಮೇಲ್ ಅಥವಾ ಫೋನ್'}
-                    />
-                    <Button 
-                      variant="secondary" 
-                      className="w-full mt-2"
-                      onClick={() => {
-                        setView('history');
-                        setIsAuthOpen(false);
-                      }}
-                    >
-                      {language === 'en' ? 'View Order History' : 'ಆರ್ಡರ್ ಇತಿಹಾಸ ನೋಡಿ'}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          </>
+          <AuthModal 
+            onClose={() => setIsAuthOpen(false)}
+            language={language}
+            sellerPin={sellerPin}
+            setSellerPin={setSellerPin}
+            handleSellerLogin={handleSellerLogin}
+            buyerEmail={buyerEmail}
+            setBuyerEmail={setBuyerEmail}
+            setView={setView}
+          />
         )}
       </AnimatePresence>
 
@@ -3479,6 +4487,21 @@ export default function App() {
           {(isAuthOpen || view === 'seller') && <motion.div layoutId="nav-dot" className="absolute -bottom-1 w-1 h-1 bg-brand-olive rounded-full" />}
         </motion.button>
       </div>
+
+      <AIConcierge 
+        isOpen={isAIConciergeOpen} 
+        onClose={() => setIsAIConciergeOpen(false)} 
+        language={language} 
+      />
+
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={() => setIsAIConciergeOpen(true)}
+        className="fixed bottom-24 md:bottom-6 right-6 z-50 w-14 h-14 bg-brand-olive text-white rounded-full shadow-2xl flex items-center justify-center border-2 border-brand-mango/30 backdrop-blur-md"
+      >
+        <Sparkles className="w-6 h-6 text-brand-mango" />
+      </motion.button>
 
       {dbStatus && (
         <div 
