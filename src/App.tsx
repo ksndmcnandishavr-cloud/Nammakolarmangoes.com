@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useState, useEffect, ChangeEvent, useMemo, useRef, ErrorInfo, ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { loadStripe } from '@stripe/stripe-js';
 import { GoogleGenAI, GenerateContentResponse, Modality, ThinkingLevel, VideoGenerationReferenceType, VideoGenerationReferenceImage } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
 import { translations, Language } from './translations';
@@ -41,8 +42,10 @@ import {
   Bell,
   MessageSquare,
   Sparkles,
+  Globe,
   Send,
   Video,
+  Play,
   Mail,
   Palette,
   ExternalLink,
@@ -109,7 +112,7 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
         className="relative"
       >
         <div className="w-32 h-32 bg-brand-mango rounded-full flex items-center justify-center shadow-2xl mango-glow animate-float">
-          <Package size={48} className="text-stone-900" />
+          <Package size={48} className="text-brand-olive" />
         </div>
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -117,7 +120,7 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
           transition={{ delay: 0.5 }}
           className="mt-8 text-center"
         >
-          <h1 className="font-serif italic text-4xl text-brand-olive mb-2">Namma kolar mango</h1>
+          <h1 className="font-serif italic text-4xl text-brand-ink mb-2">Namma Kolar Mango</h1>
           <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 font-bold">Premium Harvest • Since 1926</p>
         </motion.div>
       </motion.div>
@@ -126,7 +129,7 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
         initial={{ width: 0 }}
         animate={{ width: "200px" }}
         transition={{ duration: 2, ease: "easeInOut" }}
-        className="absolute bottom-24 h-[1px] bg-brand-olive/20 overflow-hidden"
+        className="absolute bottom-24 h-[1px] bg-brand-olive/10 overflow-hidden"
       >
         <motion.div 
           animate={{ x: ["-100%", "100%"] }}
@@ -155,13 +158,13 @@ const PullToRefresh = ({ isRefreshing }: { isRefreshing: boolean }) => (
 
 const Button = ({ className, variant = 'primary', ...props }: any) => {
   const variants = {
-    primary: 'bg-brand-olive text-white hover:bg-stone-800 shadow-xl shadow-brand-olive/10 hover:shadow-brand-olive/20 active:scale-95',
-    secondary: 'bg-white border border-brand-olive/20 text-brand-olive hover:bg-stone-50 active:scale-95',
-    mango: 'bg-gradient-to-br from-brand-mango to-brand-mango-dark text-stone-900 hover:brightness-105 shadow-xl shadow-brand-mango/20 hover:shadow-brand-mango/40 active:scale-95',
-    outline: 'bg-transparent border border-brand-olive/30 text-brand-olive hover:bg-brand-olive hover:text-white active:scale-95',
-    white: 'bg-white text-brand-olive hover:bg-stone-50 shadow-2xl active:scale-95',
-    ghost: 'hover:bg-stone-100/50 text-stone-500 active:scale-95',
-    danger: 'bg-red-50 text-red-600 hover:bg-red-100 active:scale-95'
+    primary: 'bg-brand-olive text-white hover:bg-brand-ink luxury-shadow active:scale-95 transition-all duration-300',
+    secondary: 'bg-white border border-brand-olive/20 text-brand-olive hover:bg-stone-50 active:scale-95 transition-all duration-300',
+    mango: 'bg-gradient-to-br from-brand-mango to-brand-mango-dark text-brand-ink hover:brightness-105 mango-glow active:scale-95 transition-all duration-300',
+    outline: 'bg-transparent border border-brand-olive/30 text-brand-olive hover:bg-brand-olive hover:text-white active:scale-95 transition-all duration-300',
+    white: 'bg-white text-brand-olive hover:bg-stone-50 luxury-shadow active:scale-95 transition-all duration-300',
+    ghost: 'hover:bg-stone-100/50 text-stone-500 active:scale-95 transition-all duration-300',
+    danger: 'bg-red-50 text-red-600 hover:bg-red-100 active:scale-95 transition-all duration-300'
   };
   
   const isPulsing = props.pulsing;
@@ -189,13 +192,104 @@ const Button = ({ className, variant = 'primary', ...props }: any) => {
 
 const Card = ({ children, className, glass = false }: any) => (
   <div className={cn(
-    'rounded-[2rem] warm-shadow p-6 md:p-10 transition-all duration-700 border border-stone-100/50', 
-    glass ? 'glass-card' : 'bg-white',
+    'rounded-[2.5rem] p-6 md:p-10 transition-all duration-700 border border-stone-100/50', 
+    glass ? 'glass-card' : 'bg-white luxury-shadow',
     className
   )}>
     {children}
   </div>
 );
+
+const OffersBanner = ({ offers, language, className }: { offers: Offer[], language: Language, className?: string }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const activeOffers = offers.filter(o => o.active);
+
+  useEffect(() => {
+    if (activeOffers.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % activeOffers.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [activeOffers.length]);
+
+  if (activeOffers.length === 0) return null;
+
+  const currentOffer = activeOffers[currentIndex];
+
+  return (
+    <section className={cn("relative overflow-hidden py-6", className)}>
+      <div className="max-w-7xl mx-auto px-6">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentIndex}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="relative h-48 md:h-64 rounded-[3rem] overflow-hidden bg-brand-olive group cursor-pointer shadow-2xl"
+          >
+            {/* Background Image with Overlay */}
+            <div className="absolute inset-0 z-0">
+              <img 
+                src={currentOffer.image_url || 'https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&q=80&w=1000'} 
+                className="w-full h-full object-cover opacity-40 group-hover:scale-110 transition-transform duration-1000"
+                alt={currentOffer.title}
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-brand-olive via-brand-olive/80 to-transparent" />
+            </div>
+
+            {/* Content */}
+            <div className="relative z-10 h-full flex flex-col justify-center p-10 md:p-16 max-w-2xl">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="px-4 py-1.5 bg-brand-mango rounded-full">
+                  <span className="text-[10px] font-display font-black text-brand-ink uppercase tracking-widest">
+                    {currentOffer.discount_percent}% OFF
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-white/60">
+                  <Tag size={14} />
+                  <span className="text-[10px] font-display font-black uppercase tracking-widest">
+                    CODE: {currentOffer.code}
+                  </span>
+                </div>
+              </div>
+              
+              <h3 className="text-3xl md:text-5xl font-serif italic text-white mb-4 leading-none">
+                {currentOffer.title}
+              </h3>
+              <p className="text-white/60 font-serif italic text-sm md:text-lg line-clamp-2 max-w-lg">
+                {currentOffer.description}
+              </p>
+            </div>
+
+            {/* Progress Dots */}
+            {activeOffers.length > 1 && (
+              <div className="absolute bottom-8 right-12 flex gap-3 z-20">
+                {activeOffers.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentIndex(idx);
+                    }}
+                    className={cn(
+                      "h-1.5 transition-all duration-500 rounded-full",
+                      idx === currentIndex ? "w-8 bg-brand-mango" : "w-2 bg-white/20 hover:bg-white/40"
+                    )}
+                  />
+                ))}
+              </div>
+            )}
+            
+            {/* Decorative Element */}
+            <div className="absolute top-0 right-0 w-64 h-full bg-brand-mango/5 skew-x-12 translate-x-32 pointer-events-none" />
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </section>
+  );
+};
 
 const Sidebar = ({ view, setView, t, language, cartCount, user, onOpenAuth, onLogout }: any) => {
   const navItems = [
@@ -413,9 +507,9 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
       transition={{ duration: 1, ease: [0.21, 0.45, 0.32, 0.9] }}
       className="group relative h-full"
     >
-      <Card className="h-full p-0 overflow-hidden bg-white border border-stone-100/30 hover:shadow-2xl transition-all duration-700 rounded-[3rem] flex flex-col">
+      <Card className="h-full p-0 overflow-hidden bg-white border border-stone-100/30 luxury-shadow transition-all duration-700 rounded-[3rem] flex flex-col group-hover:-translate-y-2">
         {/* Image Container */}
-        <div className="aspect-[4/5] overflow-hidden relative p-6 bg-stone-50/30">
+        <div className="aspect-[4/5] overflow-hidden relative p-6 bg-brand-cream/20">
           <motion.div 
             whileHover={{ scale: 1.02 }}
             className="w-full h-full rounded-[2.5rem] overflow-hidden bg-white shadow-inner relative"
@@ -447,7 +541,7 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
 
           {product.available === 1 && (
             <div className="absolute top-10 right-10">
-              <div className="bg-brand-mango text-stone-900 p-3 rounded-full shadow-xl animate-float">
+              <div className="bg-brand-mango text-brand-ink p-3 rounded-full shadow-xl animate-float mango-glow">
                 <Leaf className="w-4 h-4" />
               </div>
             </div>
@@ -458,7 +552,7 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
         <div className="p-8 md:p-12 flex flex-col flex-1 space-y-8">
           <div className="space-y-4">
             <div className="flex justify-between items-start gap-4">
-              <h3 className="text-3xl md:text-4xl font-serif italic leading-none tracking-tight">{product.name}</h3>
+              <h3 className="text-3xl md:text-4xl font-serif italic leading-none tracking-tight text-brand-ink">{product.name}</h3>
               <div className="flex items-center gap-1.5 bg-stone-50 px-3 py-1.5 rounded-full border border-stone-100">
                 <Star className="w-3 h-3 fill-brand-mango text-brand-mango" />
                 <span className="text-[10px] font-display font-black text-stone-600">{averageRating || '5.0'}</span>
@@ -486,7 +580,7 @@ const ProductCard = ({ product, onAddToCart, onBuyNow, t, buyerEmail, showToast 
                   className={cn(
                     "px-5 py-2.5 rounded-2xl text-[10px] font-display font-black uppercase tracking-widest transition-all duration-500 border",
                     selectedWeight === w 
-                      ? "bg-brand-olive text-white border-brand-olive shadow-xl shadow-brand-olive/20 scale-105" 
+                      ? "bg-brand-olive text-white border-brand-olive luxury-shadow scale-105" 
                       : "bg-white text-stone-400 border-stone-100 hover:border-brand-olive/20"
                   )}
                 >
@@ -656,7 +750,7 @@ const SkeletonCard = () => (
 
 const Testimonials = ({ t, language, testimonials }: any) => {
   return (
-    <section className="py-20 md:py-32 bg-stone-50 overflow-hidden">
+    <section className="py-20 md:py-32 bg-brand-cream/50 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16 md:mb-24">
           <motion.div
@@ -676,7 +770,7 @@ const Testimonials = ({ t, language, testimonials }: any) => {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.1 }}
-            className="text-4xl md:text-7xl font-serif italic text-brand-olive mb-8"
+            className="text-4xl md:text-7xl font-serif italic text-brand-ink mb-8"
           >
             {t.testimonialsSubtitle}
           </motion.h2>
@@ -692,7 +786,7 @@ const Testimonials = ({ t, language, testimonials }: any) => {
               transition={{ delay: idx * 0.1 }}
               className="min-w-[85vw] md:min-w-0 snap-center"
             >
-              <Card className="h-full flex flex-col justify-between hover:translate-y-[-8px] transition-all duration-500 border border-stone-100 bg-white rounded-[32px] p-8">
+              <Card className="h-full flex flex-col justify-between hover:translate-y-[-8px] transition-all duration-500 border border-stone-100 bg-white rounded-[32px] p-8 luxury-shadow">
                 <div className="space-y-6">
                   <div className="flex gap-1">
                     {[...Array(5)].map((_, i) => (
@@ -705,7 +799,7 @@ const Testimonials = ({ t, language, testimonials }: any) => {
                       />
                     ))}
                   </div>
-                  <p className="text-lg md:text-xl font-serif italic text-stone-600 leading-relaxed">
+                  <p className="text-lg md:text-xl font-serif italic text-brand-ink/70 leading-relaxed">
                     "{testimonial.review}"
                   </p>
                 </div>
@@ -736,8 +830,8 @@ const Testimonials = ({ t, language, testimonials }: any) => {
 const Footer = ({ t, language, onOpenHistory, onOpenAuth }: any) => (
   <footer className="bg-brand-olive text-white pt-48 pb-48 md:pb-32 relative overflow-hidden">
     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-mango to-transparent opacity-30" />
-    <div className="absolute -top-64 -right-64 w-[600px] h-[600px] bg-brand-mango/5 rounded-full blur-[120px]" />
-    <div className="absolute -bottom-64 -left-64 w-[600px] h-[600px] bg-brand-olive/20 rounded-full blur-[120px]" />
+    <div className="absolute -top-64 -right-64 w-[600px] h-[600px] bg-brand-mango/10 rounded-full blur-[120px]" />
+    <div className="absolute -bottom-64 -left-64 w-[600px] h-[600px] bg-brand-olive/40 rounded-full blur-[120px]" />
 
     <div className="max-w-7xl mx-auto px-6 relative z-10">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-24 mb-48">
@@ -747,7 +841,7 @@ const Footer = ({ t, language, onOpenHistory, onOpenAuth }: any) => (
               {language === 'en' ? 'Namma Kolar' : 'ನಮ್ಮ ಕೋಲಾರ'} <br /> 
               <span className="text-brand-mango font-light">{language === 'en' ? 'Mangoes' : 'ಮಾವು'}</span>
             </h3>
-            <p className="text-white/40 font-display font-black text-[10px] uppercase tracking-[0.5em]">Harvesting Heritage Since 1984</p>
+            <p className="text-white/40 font-display font-black text-[10px] uppercase tracking-[0.5em]">PREMIUM HARVEST • ESTD 1926</p>
           </div>
           <p className="text-white/60 font-serif italic text-2xl max-w-lg leading-relaxed">
             {t.heroSubtitle}
@@ -827,6 +921,7 @@ const Storefront = ({
   onOpenBooking, 
   heroBg, 
   onHeroBgChange, 
+  onOpenAIConcierge,
   isLoading, 
   t, 
   language, 
@@ -848,36 +943,47 @@ const Storefront = ({
   const featuredProducts = products.filter((p: any) => p.available === 1).slice(0, 3);
 
   return (
-    <div className="relative min-h-screen bg-brand-cream/30">
+    <div className="relative min-h-screen bg-brand-cream/30 max-w-[2000px] mx-auto overflow-x-hidden">
       {/* Hero Section - Editorial / Magazine Style */}
-      <section id="home" className="relative min-h-[90vh] md:min-h-screen flex items-center justify-center overflow-hidden bg-brand-olive rounded-b-[60px] md:rounded-b-[160px] shadow-[0_40px_100px_rgba(0,0,0,0.3)]">
+      <section id="home" className="relative min-h-[90vh] md:min-h-screen flex items-center justify-center overflow-hidden bg-brand-olive rounded-b-[40px] md:rounded-b-[100px] luxury-shadow">
         <motion.div 
           key={heroBg}
           initial={{ scale: 1.3, opacity: 0 }}
-          animate={{ scale: 1, opacity: 0.4 }}
+          animate={{ scale: 1, opacity: 0.3 }}
           transition={{ duration: 4, ease: [0.16, 1, 0.3, 1] }}
           className="absolute inset-0 z-0"
         >
-          <img 
-            src={heroBg || null} 
-            className="w-full h-full object-cover oval-mask brightness-75 contrast-125"
-            alt="Mango Orchard"
-            referrerPolicy="no-referrer"
-          />
+          {heroBg.endsWith('.mp4') || heroBg.includes('blob:') ? (
+            <video 
+              src={heroBg} 
+              autoPlay 
+              loop 
+              muted 
+              playsInline 
+              className="w-full h-full object-cover oval-mask brightness-50 contrast-125"
+            />
+          ) : (
+            <img 
+              src={heroBg || null} 
+              className="w-full h-full object-cover oval-mask brightness-50 contrast-125"
+              alt="Mango Orchard"
+              referrerPolicy="no-referrer"
+            />
+          )}
         </motion.div>
 
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-olive/80 via-transparent to-brand-olive/95 z-[1]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-olive/60 via-transparent to-brand-olive z-[1]" />
         
         <div className="relative z-10 text-center px-6 max-w-7xl mx-auto py-20">
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.5, duration: 1.2, ease: "easeOut" }}
-            className="inline-flex items-center gap-6 bg-white/5 backdrop-blur-3xl border border-white/10 px-10 py-4 rounded-full mb-16 shadow-[0_20px_40px_rgba(0,0,0,0.2)]"
+            className="inline-flex items-center gap-6 bg-white/5 backdrop-blur-3xl border border-white/10 px-10 py-4 rounded-full mb-16 shadow-[0_20px_40px_rgba(0,0,0,0.3)]"
           >
             <div className="w-3 h-3 bg-brand-mango rounded-full mango-glow" />
             <span className="text-white text-[11px] font-display font-black uppercase tracking-[0.5em] whitespace-nowrap">
-              {t.harvestAvailable} • ESTD 1984
+              {t.harvestAvailable} • ESTD 1926
             </span>
           </motion.div>
 
@@ -886,8 +992,9 @@ const Storefront = ({
               initial={{ y: 100, opacity: 0, skewY: 5 }}
               animate={{ y: 0, opacity: 1, skewY: 0 }}
               transition={{ delay: 0.8, duration: 1.8, ease: [0.23, 1, 0.32, 1] }}
-              className="text-8xl md:text-[16vw] text-white font-serif italic leading-[0.7] tracking-tighter drop-shadow-2xl"
+              className="text-6xl md:text-[12vw] lg:text-[10rem] text-white font-serif italic leading-[0.9] tracking-tighter drop-shadow-2xl relative"
             >
+              <span className="absolute inset-0 blur-3xl bg-brand-mango/20 -z-10" />
               {language === 'en' ? (
                 <>Namma <span className="text-brand-mango italic font-light">Kolar</span> <br /> <span className="not-italic font-black text-white/90">Mangoes</span></>
               ) : (
@@ -951,7 +1058,11 @@ const Storefront = ({
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-6 -mt-32 relative z-20">
+      <div className="relative z-30 -mt-24 md:-mt-32 mb-12">
+        <OffersBanner offers={offers} language={language} />
+      </div>
+
+      <div className="max-w-[1440px] mx-auto px-6 md:px-12 relative z-20">
         {/* Featured Section - Horizontal Scroll / Marquee Feel */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10 mb-32">
           {featuredProducts.map((product: any, idx: number) => (
@@ -980,7 +1091,7 @@ const Storefront = ({
         </div>
 
         {/* Main Content Area */}
-        <div id="products" className="py-32 md:py-48">
+        <div id="products" className="py-24 md:py-40">
           <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-24 md:mb-32 gap-12">
             <div className="max-w-3xl text-left">
               <span className="text-brand-olive font-display text-[10px] font-black uppercase tracking-[0.5em] mb-6 block">
@@ -1102,7 +1213,7 @@ const Storefront = ({
             >
               <img 
                 src="https://images.unsplash.com/photo-1591073113125-e46713c829ed?auto=format&fit=crop&q=80&w=1200" 
-                className="rounded-[40px] md:rounded-[60px] warm-shadow w-full aspect-[4/5] object-cover"
+                className="rounded-[40px] md:rounded-[60px] luxury-shadow w-full aspect-[4/5] object-cover"
                 alt="Orchard Heritage"
                 referrerPolicy="no-referrer"
                 loading="lazy"
@@ -1116,7 +1227,7 @@ const Storefront = ({
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ delay: 0.3 }}
-              className="absolute -bottom-6 -right-6 md:-bottom-10 md:-right-10 bg-brand-olive p-6 md:p-10 rounded-[32px] md:rounded-[40px] text-white warm-shadow"
+              className="absolute -bottom-6 -right-6 md:-bottom-10 md:-right-10 bg-brand-olive p-6 md:p-10 rounded-[32px] md:rounded-[40px] text-white luxury-shadow"
             >
               <p className="text-4xl md:text-5xl font-serif italic mb-1 md:mb-2">40+</p>
               <p className="text-[8px] md:text-[10px] font-sans font-bold uppercase tracking-widest opacity-60">{t.yearsOfExcellence}</p>
@@ -1126,7 +1237,7 @@ const Storefront = ({
           <div className="space-y-8 md:space-y-10">
             <div className="space-y-4">
               <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em]">{t.ourStory}</span>
-              <h2 className="text-5xl md:text-8xl font-serif italic leading-tight">{language === 'en' ? 'Grown with' : 'ಸಂಪ್ರದಾಯದೊಂದಿಗೆ'} <br /> <span className="text-brand-mango">{language === 'en' ? 'Tradition' : 'ಬೆಳೆದಿದೆ'}</span></h2>
+              <h2 className="text-5xl md:text-8xl font-serif italic leading-tight text-brand-ink">{language === 'en' ? 'Grown with' : 'ಸಂಪ್ರದಾಯದೊಂದಿಗೆ'} <br /> <span className="text-brand-mango">{language === 'en' ? 'Tradition' : 'ಬೆಳೆದಿದೆ'}</span></h2>
             </div>
             <p className="text-lg md:text-xl text-stone-500 font-serif italic leading-relaxed">
               {t.farmDescription}
@@ -1155,6 +1266,83 @@ const Storefront = ({
       </section>
 
       <Testimonials t={t} language={language} testimonials={testimonials} />
+
+      {/* Visual Experience Section */}
+      <section className="py-32 bg-brand-cream overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center space-y-8 mb-24">
+            <span className="text-brand-olive font-sans text-[10px] font-bold uppercase tracking-[0.4em]">{t.visualExperience}</span>
+            <h2 className="text-6xl md:text-8xl font-serif italic leading-tight text-brand-ink">{t.experienceTheFuture}</h2>
+            <p className="text-xl text-stone-400 font-serif italic max-w-2xl mx-auto">{t.aiDescription}</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <motion.div 
+              initial={{ opacity: 0, x: -50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="glass-card rounded-[60px] p-12 space-y-12 bg-white/40"
+            >
+              <div className="aspect-video rounded-[40px] overflow-hidden bg-stone-100 relative group luxury-shadow">
+                {heroBg.includes('blob:') ? (
+                  <video src={heroBg} autoPlay loop muted playsInline className="w-full h-full object-cover" />
+                ) : (
+                  <img src={heroBg} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                )}
+                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Sparkles className="w-12 h-12 text-white animate-pulse" />
+                </div>
+              </div>
+              <div className="space-y-6">
+                <h3 className="text-4xl font-serif italic text-brand-ink">{t.highQualityVisuals}</h3>
+                <p className="text-stone-500 font-serif italic leading-relaxed">
+                  {language === 'en' 
+                    ? "Our AI-powered visuals bring the orchard to life. Generate high-quality 4K images and animate them into cinematic videos."
+                    : "ನಮ್ಮ AI-ಚಾಲಿತ ದೃಶ್ಯಗಳು ತೋಟಕ್ಕೆ ಜೀವ ತುಂಬುತ್ತವೆ. ಉತ್ತಮ ಗುಣಮಟ್ಟದ 4K ಚಿತ್ರಗಳನ್ನು ರಚಿಸಿ ಮತ್ತು ಅವುಗಳನ್ನು ಸಿನಿಮೀಯ ವೀಡಿಯೊಗಳಾಗಿ ಅನಿಮೇಟ್ ಮಾಡಿ."}
+                </p>
+                <Button 
+                  variant="mango" 
+                  className="w-full py-8 rounded-3xl"
+                  onClick={onOpenAIConcierge}
+                >
+                  {t.generateArt}
+                </Button>
+              </div>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, x: 50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="glass-card rounded-[60px] p-12 space-y-12 bg-brand-olive text-white luxury-shadow"
+            >
+              <div className="aspect-video rounded-[40px] overflow-hidden bg-white/10 relative flex items-center justify-center">
+                <Video className="w-20 h-20 text-brand-mango/20" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-16 h-16 bg-brand-mango rounded-full flex items-center justify-center shadow-2xl shadow-brand-mango/40 cursor-pointer hover:scale-110 transition-transform">
+                    <Play className="w-8 h-8 text-brand-olive ml-1" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-6">
+                <h3 className="text-4xl font-serif italic">{t.farmCinema}</h3>
+                <p className="text-white/60 font-serif italic leading-relaxed">
+                  {language === 'en'
+                    ? "Watch our orchards sway in the breeze. We use advanced video generation to create immersive experiences of our heritage farm."
+                    : "ನಮ್ಮ ತೋಟಗಳು ತಂಗಾಳಿಯಲ್ಲಿ ತೂಗಾಡುವುದನ್ನು ನೋಡಿ. ನಮ್ಮ ಪರಂಪರೆಯ ಫಾರ್ಮ್‌ನ ತಲ್ಲೀನಗೊಳಿಸುವ ಅನುಭವಗಳನ್ನು ರಚಿಸಲು ನಾವು ಸುಧಾರಿತ ವೀಡಿಯೊ ಉತ್ಪಾದನೆಯನ್ನು ಬಳಸುತ್ತೇವೆ."}
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="w-full py-8 rounded-3xl border-white/20 text-white hover:bg-white hover:text-brand-olive"
+                  onClick={onOpenAIConcierge}
+                >
+                  {t.animateFarm}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
 
       {/* Visit Our Farm Section */}
       <section id="visit" className="py-32 bg-brand-cream overflow-hidden">
@@ -1664,7 +1852,7 @@ const CartPage = ({ items, onUpdateQuantity, onRemove, onCheckout, onApplyPromo,
 
 const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: any) => {
   const [step, setStep] = useState(1);
-  const [paymentMethod, setPaymentMethod] = useState<'online' | 'split'>('online');
+  const [paymentMethod, setPaymentMethod] = useState<'online' | 'split' | 'stripe'>('online');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -1681,6 +1869,86 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
 
   const depositAmount = Math.round(total * 0.3); // 30% deposit
   const balanceAmount = total - depositAmount;
+
+  const handleStripePayment = async () => {
+    setIsProcessing(true);
+    const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+    
+    if (!stripeKey) {
+      setIsProcessing(false);
+      alert(language === 'en' 
+        ? "Stripe Key is missing. Please configure VITE_STRIPE_PUBLISHABLE_KEY in your environment." 
+        : "Stripe ಕೀ ಕಾಣೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಪರಿಸರದಲ್ಲಿ VITE_STRIPE_PUBLISHABLE_KEY ಅನ್ನು ಕಾನ್ಫಿಗರ್ ಮಾಡಿ.");
+      return;
+    }
+
+    try {
+      const stripe = await loadStripe(stripeKey);
+      if (!stripe) throw new Error('Stripe failed to load');
+
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: items.map((item: any) => ({
+            name: item.name,
+            price: item.price * item.selectedWeight,
+            quantity: item.quantity,
+            image_url: item.image_url
+          })),
+          customer_email: formData.email
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create Stripe session');
+      }
+
+      const session = await response.json();
+      
+      // Save order as pending before redirecting
+      await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: formData.name,
+          customer_email: formData.email,
+          address: formData.address,
+          phone: formData.phone,
+          items: items.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            selectedWeight: item.selectedWeight
+          })),
+          total,
+          delivery_charge: deliveryCharge,
+          promo_code: appliedOffer?.code || null,
+          payment_id: session.id,
+          payment_status: 'pending',
+          payment_method: 'stripe',
+          paid_amount: 0,
+          status: 'pending'
+        })
+      });
+
+      const result = await (stripe as any).redirectToCheckout({
+        sessionId: session.id,
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+    } catch (error: any) {
+      console.error("Stripe integration error:", error);
+      setIsProcessing(false);
+      alert(language === 'en' 
+        ? `Stripe initialization failed: ${error.message}` 
+        : `Stripe ಪ್ರಾರಂಭಿಸಲು ವಿಫಲವಾಗಿದೆ: ${error.message}`);
+    }
+  };
 
   const handleRazorpayPayment = async (amount: number, isSplit: boolean) => {
     setIsProcessing(true);
@@ -1760,7 +2028,9 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
   };
 
   const handleFinalSubmit = () => {
-    if (paymentMethod === 'online') {
+    if (paymentMethod === 'stripe') {
+      handleStripePayment();
+    } else if (paymentMethod === 'online') {
       handleRazorpayPayment(total, false);
     } else {
       handleRazorpayPayment(depositAmount, true);
@@ -1893,7 +2163,7 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
                   </div>
                   <div className="flex-1">
                     <p className="font-serif text-xl italic leading-none">{t.payOnline}</p>
-                    <p className="text-[10px] text-stone-400 font-sans mt-2 uppercase tracking-widest font-bold">{language === 'en' ? 'Full Payment' : 'ಪೂರ್ಣ ಪಾವತಿ'}</p>
+                    <p className="text-[10px] text-stone-400 font-sans mt-2 uppercase tracking-widest font-bold">{language === 'en' ? 'Full Payment (Razorpay)' : 'ಪೂರ್ಣ ಪಾವತಿ (Razorpay)'}</p>
                     <p className="text-[10px] text-stone-400 font-sans mt-1">{language === 'en' ? 'UPI, Cards, or Netbanking' : 'UPI, ಕಾರ್ಡ್‌ಗಳು ಅಥವಾ ನೆಟ್‌ಬ್ಯಾಂಕಿಂಗ್'}</p>
                   </div>
                   <div className={cn(
@@ -1903,6 +2173,36 @@ const CheckoutForm = ({ items, onBack, onSubmit, appliedOffer, t, language }: an
                     <motion.div 
                       initial={false}
                       animate={{ scale: paymentMethod === 'online' ? 1 : 0 }}
+                      className="w-2 h-2 bg-white rounded-full" 
+                    />
+                  </div>
+                </div>
+
+                <div 
+                  onClick={() => setPaymentMethod('stripe')}
+                  className={cn(
+                    "p-6 rounded-[32px] border-2 cursor-pointer transition-all flex items-center gap-6 relative overflow-hidden group",
+                    paymentMethod === 'stripe' ? "border-brand-mango bg-brand-mango/5" : "border-stone-100 hover:border-stone-200"
+                  )}
+                >
+                  <div className={cn(
+                    "w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500",
+                    paymentMethod === 'stripe' ? "bg-brand-mango text-stone-900 scale-110" : "bg-stone-100 text-stone-400"
+                  )}>
+                    <Globe className="w-7 h-7" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-serif text-xl italic leading-none">{language === 'en' ? 'International Card' : 'ಅಂತರರಾಷ್ಟ್ರೀಯ ಕಾರ್ಡ್'}</p>
+                    <p className="text-[10px] text-stone-400 font-sans mt-2 uppercase tracking-widest font-bold">{language === 'en' ? 'Powered by Stripe' : 'Stripe ಮೂಲಕ'}</p>
+                    <p className="text-[10px] text-stone-400 font-sans mt-1">{language === 'en' ? 'Secure Global Payments' : 'ಸುರಕ್ಷಿತ ಜಾಗತಿಕ ಪಾವತಿಗಳು'}</p>
+                  </div>
+                  <div className={cn(
+                    "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-500",
+                    paymentMethod === 'stripe' ? "border-brand-mango bg-brand-mango" : "border-stone-200"
+                  )}>
+                    <motion.div 
+                      initial={false}
+                      animate={{ scale: paymentMethod === 'stripe' ? 1 : 0 }}
                       className="w-2 h-2 bg-white rounded-full" 
                     />
                   </div>
@@ -2414,7 +2714,7 @@ const SellerDashboard = ({ products, orders, offers, onUpdateProduct, onAddProdu
                       <label className="text-[10px] uppercase tracking-widest text-stone-400 font-sans font-bold">Est. Delivery</label>
                       <input 
                         type="text"
-                        placeholder="e.g. 12th March"
+                        placeholder="e.g. 24th April"
                         value={order.estimated_delivery || ''}
                         onChange={e => onUpdateOrder(order.id, { estimated_delivery: e.target.value })}
                         className="w-full bg-stone-50 border-none rounded-xl px-4 py-2 font-sans text-xs focus:ring-2 focus:ring-brand-olive/20 outline-none"
@@ -2919,7 +3219,7 @@ export class ErrorBoundary extends React.Component<any, any> {
   }
 }
 
-const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: () => void, language: Language }) => {
+const AIConcierge = ({ isOpen, onClose, language, onHeroBgChange }: { isOpen: boolean, onClose: () => void, language: Language, onHeroBgChange: (bg: string) => void }) => {
   const [activeTab, setActiveTab] = useState<'chat' | 'art' | 'video'>('chat');
   const [messages, setMessages] = useState<{ role: 'user' | 'model', content: string, groundingMetadata?: any }[]>([]);
   const [input, setInput] = useState('');
@@ -2928,7 +3228,8 @@ const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: 
   const [generatedVideo, setGeneratedVideo] = useState<string | null>(null);
   const [imageToEdit, setImageToEdit] = useState<string | null>(null);
   const [imageToAnimate, setImageToAnimate] = useState<string | null>(null);
-  const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('1K');
+  const [imageSize, setImageSize] = useState<'512px' | '1K' | '2K' | '4K'>('1K');
+  const [aspectRatio, setAspectRatio] = useState<'1:1' | '16:9' | '9:16' | '4:3' | '3:4'>('16:9');
   const [isKeySelected, setIsKeySelected] = useState(false);
 
   useEffect(() => {
@@ -2992,11 +3293,11 @@ const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: 
       }
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
+        model: 'gemini-3.1-flash-image-preview',
         contents: { parts: [{ text: input }] },
         config: {
           imageConfig: {
-            aspectRatio: "1:1",
+            aspectRatio: aspectRatio as any,
             imageSize: imageSize as any
           }
         }
@@ -3010,6 +3311,38 @@ const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: 
       }
     } catch (error) {
       console.error("Image generation error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGenerateHeroImage = async () => {
+    setIsLoading(true);
+    const heroPrompt = "A vibrant mango orchard in Kolar, Karnataka, during golden hour, 4k resolution, cinematic lighting, lush green trees with golden mangoes hanging, traditional Indian farm landscape";
+    try {
+      if (!isKeySelected) {
+        await handleOpenSelectKey();
+      }
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-image-preview',
+        contents: { parts: [{ text: heroPrompt }] },
+        config: {
+          imageConfig: {
+            aspectRatio: aspectRatio as any,
+            imageSize: imageSize as any
+          }
+        }
+      });
+
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          setGeneratedImage(`data:image/png;base64,${part.inlineData.data}`);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error("Hero image generation error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -3036,6 +3369,12 @@ const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: 
             { inlineData: { data: base64Data, mimeType: "image/png" } },
             { text: input }
           ]
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1",
+            imageSize: imageSize as any
+          }
         }
       });
 
@@ -3264,7 +3603,7 @@ const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: 
                   <div className="space-y-4">
                     <p className="text-[9px] font-display font-black uppercase tracking-[0.2em] text-stone-400">Resolution</p>
                     <div className="flex gap-3">
-                      {['1K', '2K', '4K'].map(size => (
+                      {['512px', '1K', '2K', '4K'].map(size => (
                         <button 
                           key={size}
                           onClick={() => setImageSize(size as any)}
@@ -3281,14 +3620,49 @@ const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: 
                     </div>
                   </div>
 
-                  <Button 
-                    variant="mango"
-                    onClick={handleGenerateImage}
-                    disabled={isLoading || !input}
-                    className="w-full py-6 rounded-2xl shadow-xl shadow-brand-mango/20"
-                  >
-                    {isLoading ? "Creating..." : "Generate Masterpiece"}
-                  </Button>
+                  <div className="space-y-4">
+                    <p className="text-[9px] font-display font-black uppercase tracking-[0.2em] text-stone-400">Aspect Ratio</p>
+                    <div className="flex flex-wrap gap-2">
+                      {['1:1', '16:9', '9:16', '4:3', '3:4'].map(ratio => (
+                        <button 
+                          key={ratio}
+                          onClick={() => setAspectRatio(ratio as any)}
+                          className={cn(
+                            "px-4 py-3 text-[10px] font-display font-black rounded-xl border transition-all duration-500 min-w-[60px]", 
+                            aspectRatio === ratio 
+                              ? "bg-brand-mango text-brand-ink border-brand-mango shadow-lg shadow-brand-mango/20" 
+                              : "bg-white border-stone-200 text-stone-400 hover:border-brand-mango hover:text-brand-mango"
+                          )}
+                        >
+                          {ratio}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 pt-4">
+                    <Button 
+                      variant="mango"
+                      onClick={handleGenerateImage}
+                      disabled={isLoading || !input}
+                      className="w-full py-6 rounded-2xl shadow-xl shadow-brand-mango/20"
+                    >
+                      {isLoading ? "Creating..." : "Generate Masterpiece"}
+                    </Button>
+
+                    <Button 
+                      variant="outline"
+                      onClick={handleGenerateHeroImage}
+                      disabled={isLoading}
+                      className="w-full py-6 rounded-2xl border-brand-olive text-brand-olive hover:bg-brand-olive hover:text-white"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate Hero Showcase
+                    </Button>
+                    <p className="text-[9px] text-center text-stone-400 leading-relaxed max-w-[200px] mx-auto italic">
+                      Generate a professional orchard landscape to showcase Kolar's heritage.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-8 p-10 bg-brand-olive text-white rounded-[3rem] shadow-2xl relative overflow-hidden group">
@@ -3351,7 +3725,18 @@ const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: 
                   </div>
                   <div className="relative aspect-square max-w-2xl mx-auto rounded-[4rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.2)] border-8 border-white group">
                     <img src={generatedImage} alt="Generated Art" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 flex items-end justify-center p-12">
+                      <Button 
+                        variant="mango" 
+                        className="w-full py-6 rounded-2xl shadow-2xl"
+                        onClick={() => {
+                          onHeroBgChange(generatedImage);
+                          onClose();
+                        }}
+                      >
+                        Set as Hero Background
+                      </Button>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -3446,8 +3831,20 @@ const AIConcierge = ({ isOpen, onClose, language }: { isOpen: boolean, onClose: 
                       Save Video
                     </button>
                   </div>
-                  <div className="relative rounded-[4rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.3)] border-8 border-white bg-stone-900">
+                  <div className="relative rounded-[4rem] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.3)] border-8 border-white bg-stone-900 group">
                     <video src={generatedVideo} controls className="w-full aspect-video object-cover" />
+                    <div className="absolute top-8 right-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button 
+                        variant="mango" 
+                        className="px-8 py-4 rounded-2xl shadow-2xl"
+                        onClick={() => {
+                          onHeroBgChange(generatedVideo);
+                          onClose();
+                        }}
+                      >
+                        Set as Hero Background
+                      </Button>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -3580,9 +3977,9 @@ const HarvestCalendar = ({ language }: { language: Language }) => {
   const months = [
     { name: 'Mar', status: 'Flowering', color: 'bg-emerald-100 text-emerald-700', icon: <Leaf className="w-4 h-4" /> },
     { name: 'Apr', status: 'Fruit Set', color: 'bg-amber-100 text-amber-700', icon: <Sparkles className="w-4 h-4" /> },
-    { name: 'May', status: 'Peak Harvest', color: 'bg-brand-mango/20 text-brand-mango-dark', icon: <Star className="w-4 h-4" />, active: true },
-    { name: 'Jun', status: 'Late Harvest', color: 'bg-brand-mango/10 text-brand-mango-dark', icon: <Clock className="w-4 h-4" /> },
-    { name: 'Jul', status: 'Post Harvest', color: 'bg-stone-100 text-stone-600', icon: <CheckCircle2 className="w-4 h-4" /> },
+    { name: 'May', status: 'Harvest Starts', color: 'bg-brand-mango/20 text-brand-mango-dark', icon: <Play className="w-4 h-4" />, active: true },
+    { name: 'Jun', status: 'Peak Season', color: 'bg-brand-mango/30 text-brand-mango-dark', icon: <Star className="w-4 h-4" /> },
+    { name: 'Jul', status: 'Late Harvest', color: 'bg-stone-100 text-stone-600', icon: <Clock className="w-4 h-4" /> },
   ];
 
   return (
@@ -3861,11 +4258,62 @@ const MangoEtiquette = ({ language }: { language: Language }) => {
   );
 };
 
+const SuccessPage = ({ onBack, t, language }: any) => (
+  <motion.div 
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    className="max-w-2xl mx-auto px-6 py-32 text-center space-y-8"
+  >
+    <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-8">
+      <CheckCircle2 className="w-12 h-12 text-emerald-600" />
+    </div>
+    <h2 className="text-5xl md:text-7xl font-serif italic text-brand-olive">
+      {language === 'en' ? 'Order Successful!' : 'ಆರ್ಡರ್ ಯಶಸ್ವಿಯಾಗಿದೆ!'}
+    </h2>
+    <p className="text-stone-500 font-sans text-lg max-w-md mx-auto">
+      {language === 'en' 
+        ? 'Thank you for your purchase. Your premium Kolar mangoes are being prepared for harvest.' 
+        : 'ನಿಮ್ಮ ಖರೀದಿಗೆ ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಪ್ರೀಮಿಯಂ ಕೋಲಾರ ಮಾವಿನ ಹಣ್ಣುಗಳನ್ನು ಕೊಯ್ಲಿಗೆ ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ.'}
+    </p>
+    <div className="pt-8">
+      <Button variant="mango" onClick={onBack} className="px-12 py-6">
+        {t.backToStore}
+      </Button>
+    </div>
+  </motion.div>
+);
+
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [view, setView] = useState<'store' | 'checkout' | 'seller' | 'history' | 'cart'>('store');
+  const [view, setView] = useState<'store' | 'checkout' | 'seller' | 'history' | 'cart' | 'success'>('store');
   const [user, setUser] = useState<any | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    if (sessionId) {
+      const verifySession = async () => {
+        try {
+          const res = await fetch(`/api/verify-stripe-session?session_id=${sessionId}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+              setView('success');
+              // Clear cart after successful payment
+              setCart([]);
+              setAppliedOffer(null);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to verify Stripe session:", error);
+        }
+      };
+      verifySession();
+      // Remove session_id from URL without refreshing
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   const handleLogin = async () => {
     // Firebase auth removed
@@ -4331,6 +4779,7 @@ export default function App() {
                 onOpenBooking={() => setIsBookingModalOpen(true)}
                 heroBg={heroBg}
                 onHeroBgChange={setHeroBg}
+                onOpenAIConcierge={() => setIsAIConciergeOpen(true)}
                 isLoading={isLoading}
                 t={t}
                 language={language}
@@ -4370,6 +4819,14 @@ export default function App() {
                 appliedOffer={appliedOffer}
                 onBack={() => setView('store')}
                 onSubmit={handleCheckout}
+                t={t}
+                language={language}
+              />
+            )}
+
+            {view === 'success' && (
+              <SuccessPage 
+                onBack={() => setView('store')}
                 t={t}
                 language={language}
               />
@@ -4491,16 +4948,21 @@ export default function App() {
       <AIConcierge 
         isOpen={isAIConciergeOpen} 
         onClose={() => setIsAIConciergeOpen(false)} 
-        language={language} 
+        language={language}
+        onHeroBgChange={setHeroBg}
       />
 
       <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => setIsAIConciergeOpen(true)}
-        className="fixed bottom-24 md:bottom-6 right-6 z-50 w-14 h-14 bg-brand-olive text-white rounded-full shadow-2xl flex items-center justify-center border-2 border-brand-mango/30 backdrop-blur-md"
+        className="fixed bottom-24 md:bottom-12 right-6 md:right-12 z-50 w-16 h-16 md:w-20 md:h-20 bg-brand-olive text-brand-mango rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex items-center justify-center border border-white/10 backdrop-blur-xl group overflow-hidden"
       >
-        <Sparkles className="w-6 h-6 text-brand-mango" />
+        <div className="absolute inset-0 bg-gradient-to-br from-brand-mango/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <Sparkles className="w-6 h-6 md:w-8 md:h-8 animate-pulse relative z-10" />
+        <div className="absolute -top-1 -right-1 w-6 h-6 bg-brand-mango text-brand-ink text-[9px] font-black rounded-full flex items-center justify-center border-2 border-brand-olive shadow-lg">
+          AI
+        </div>
       </motion.button>
 
       {dbStatus && (

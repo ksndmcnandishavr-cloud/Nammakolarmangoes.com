@@ -13,6 +13,7 @@
   "dependencies": {
     "@google/genai": "^1.46.0",
     "@insforge/cli": "^0.1.31",
+    "@stripe/stripe-js": "^8.11.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "better-sqlite3": "^12.4.1",

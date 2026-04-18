@@ -346,6 +346,29 @@ async function startServer() {
     }
   });
 
+  app.get("/api/verify-stripe-session", async (req, res) => {
+    const { session_id } = req.query;
+    if (!session_id) return res.status(400).json({ error: "Missing session_id" });
+
+    try {
+      const session = await stripe.checkout.sessions.retrieve(session_id as string);
+      if (session.payment_status === 'paid') {
+        // Update order status and paid amount
+        db.prepare(`
+          UPDATE orders 
+          SET payment_status = 'paid', paid_amount = ?, status = 'confirmed' 
+          WHERE payment_id = ?
+        `).run(session.amount_total! / 100, session_id);
+        
+        res.json({ success: true });
+      } else {
+        res.json({ success: false, status: session.payment_status });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Auth
   app.post("/api/seller/login", (req, res) => {
     const { pin } = req.body;
